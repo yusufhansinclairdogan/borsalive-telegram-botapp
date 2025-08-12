@@ -13,7 +13,7 @@ from fastapi import APIRouter
 from .config import settings
 from .depth_proxy import MatrixDepthClient
 from .snapshot import render_depth_png
-
+import random
 log = logging.getLogger("app.web")
 app = FastAPI(title="borsalive-api")
 
@@ -60,8 +60,8 @@ async def ws_depth(websocket: WebSocket, symbol: str):
                     await websocket.send_json({"status": "reconnecting"})
                 except Exception:
                     pass
-                await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, 10.0)
+                await asyncio.sleep(backoff + random.uniform(0, 0.5))
+                backoff = min(backoff * 1.7, 10.0)
     except WebSocketDisconnect:
         log.info("WS disconnected for %s", sym)
         return
