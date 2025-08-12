@@ -177,7 +177,7 @@ class MatrixDepthClient:
         return [
             f"mx/depth/{self.symbol}@lvl2",
             # f"mx/depth/{self.symbol}@lvl3",
-            f"mx/depthstats/{self.symbol}",
+            # f"mx/depthstats/{self.symbol}",
         ]
 
     async def connect_and_stream(self) -> AsyncIterator[List[dict]]:

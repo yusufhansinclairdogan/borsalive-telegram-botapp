@@ -1,19 +1,20 @@
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Response
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+# app/web.py
+from __future__ import annotations
+import asyncio, logging, random, time, base64, json
+from pathlib import Path
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Header, HTTPException, APIRouter
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from starlette.middleware.cors import CORSMiddleware
-import asyncio, logging
-from fastapi import Header, HTTPException
-import base64
+from starlette.websockets import WebSocketState
+
 from .config import settings
-from .depth_proxy import token_manager  # aynı instance
-import base64, json, time
-from fastapi import APIRouter
-from .config import settings
-from .depth_proxy import MatrixDepthClient
+from .depth_proxy import MatrixDepthClient, token_manager
 from .snapshot import render_depth_png
-import random
+from .logging_setup import with_ctx
+
+router = APIRouter()
 log = logging.getLogger("app.web")
 app = FastAPI(title="borsalive-api")
 
@@ -22,6 +23,8 @@ app.add_middleware(
     allow_origins=[settings.WEBAPP_BASE, "https://web.telegram.org", "https://web.telegram.org.a", "https://web.telegram.org/k/"],
     allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
+
+# klasörler (senin yerleşimine göre)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
@@ -40,36 +43,55 @@ def depth_webapp(request: Request, symbol: str):
 async def ws_depth(websocket: WebSocket, symbol: str):
     await websocket.accept()
     sym = symbol.upper()
-    log.info("WS client connected for %s", sym)
+    # bağlantı kimliği: kısa heks
+    conn = hex(random.getrandbits(24))[2:]
+    L = with_ctx(log, symbol=sym, conn=conn)
 
-    client = MatrixDepthClient(
-        symbol=sym,
-        connect_template_b64=settings.CONNECT_TEMPLATE_B64,
-    )
+    L.info("WS client connected")
+    client = MatrixDepthClient(symbol=sym, connect_template_b64=settings.CONNECT_TEMPLATE_B64)
+
+    async def safe_send(obj) -> bool:
+        if websocket.application_state != WebSocketState.CONNECTED:
+            return False
+        try:
+            await websocket.send_json(obj)
+            return True
+        except WebSocketDisconnect:
+            return False
+        except RuntimeError as e:
+            L.warning('Client closed while sending: %s', e)
+            return False
+        except Exception:
+            L.exception("send_json failed")
+            return False
 
     backoff = 1.0
     try:
-        while True:
+        # UI rozeti için
+        await safe_send({"status": "connected", "symbol": sym})
+
+        while websocket.application_state == WebSocketState.CONNECTED:
             try:
                 async for levels in client.connect_and_stream():
-                    await websocket.send_json({"symbol": sym, "levels": levels})
+                    if not await safe_send({"symbol": sym, "levels": levels}):
+                        return
                     backoff = 1.0
+            except WebSocketDisconnect:
+                L.info("WS disconnected by client")
+                return
             except Exception:
-                log.exception("ws_depth error for %s", sym)  # <-- TÜM stacktrace
-                try:
-                    await websocket.send_json({"status": "reconnecting"})
-                except Exception:
-                    pass
+                L.exception("ws_depth error")
+                await safe_send({"status": "reconnecting"})
                 await asyncio.sleep(backoff + random.uniform(0, 0.5))
                 backoff = min(backoff * 1.7, 10.0)
-    except WebSocketDisconnect:
-        log.info("WS disconnected for %s", sym)
-        return
+    finally:
+        L.info("WS disconnected")
 
 @app.get("/api/snapshot/depth.png")
 def snapshot_depth(symbol: str):
     png = render_depth_png([], symbol.upper())
     return Response(content=png, media_type="image/png")
+
 def _assert_admin(x_api_key: str | None):
     if not x_api_key or x_api_key != settings.ADMIN_API_KEY:
         raise HTTPException(status_code=401, detail="unauthorized")
@@ -89,7 +111,7 @@ async def admin_set_template(body: dict, x_api_key: str = Header(None)):
     b64 = body.get("b64")
     if not b64:
         raise HTTPException(status_code=400, detail="b64 required")
-    settings.CONNECT_TEMPLATE_B64 = b64  # runtime set
+    settings.CONNECT_TEMPLATE_B64 = b64
     return {"ok": True}
 
 @app.get("/diag")
@@ -116,4 +138,4 @@ def diag():
         "jwt_present": bool(jwt),
         "jwt_exp_unix": exp,
         "jwt_exp_human": _exp(exp) if exp else None,
-    }
+    } 

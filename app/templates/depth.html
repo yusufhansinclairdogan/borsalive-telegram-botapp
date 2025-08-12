@@ -1,35 +1,54 @@
 <!doctype html>
-<html>
+<html lang="tr">
 <head>
   <meta charset="utf-8" />
-  <title>Derinlik</title>
+  <title>Anlık Derinlik • {{ symbol }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/depth.js" defer></script>
-  <script>window.WS_PATH="{{ websocket_url }}"; window.SYMBOL="{{ symbol }}";</script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>window.WS_PATH="{{ websocket_url }}"; window.SYMBOL="{{ symbol }}";</script>
+  <script src="/static/depth.js" defer></script>
+  <style>
+    /* CANLI rozeti */
+    @keyframes liveblink { 0%,50%{opacity:1} 51%,100%{opacity:.15} }
+    .live-pill{display:inline-flex;align-items:center;gap:.5rem;background:#ef4444;color:#fff;
+      border-radius:9999px;padding:.2rem .6rem;font-weight:700;font-size:.75rem}
+    .live-dot{width:.6rem;height:.6rem;border-radius:9999px;background:#fff;animation:liveblink 1s infinite}
+
+    /* Hücre flash – sadece değişen hücrelerde */
+    @keyframes flashBid { 0%{background-color:rgba(34, 197, 94, 0.853)} 100%{background-color:transparent} }
+    @keyframes flashAsk { 0%{background-color:rgba(239, 68, 68, 0.808)} 100%{background-color:transparent} }
+    .flash-bid{ animation:flashBid .6s ease-out; }
+    .flash-ask{ animation:flashAsk .6s ease-out; }
+
+    .table-wrap{overflow-x:auto}
+  </style>
 </head>
 <body class="bg-slate-900 text-slate-100">
-  <div class="max-w-3xl mx-auto p-3 sm:p-4">
-    <header class="flex items-center justify-between mb-3">
-      <div class="flex gap-2 items-center">
-  <input id="symbolInput" class="px-3 py-2 rounded-xl bg-slate-800 text-sm outline-none" placeholder="SEMBOL (örn: GARAN)" />
-  <button id="goSymbol" class="px-3 py-2 rounded-xl bg-slate-700 text-sm">Aç</button>
-</div>
-      <h1 class="text-xl sm:text-2xl font-bold">/{{"derinlik"}} {{ symbol }}</h1>
-      <div class="flex gap-2">
-        <button id="ask-expert" class="px-3 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 text-sm">Uzmana Danış</button>
-        <a id="snapshot" href="/api/snapshot/depth.png?symbol={{ symbol }}" class="px-3 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 text-sm" target="_blank">Snapshot</a>
+  <div class="max-w-5xl mx-auto p-3 sm:p-6">
+    <header class="flex flex-wrap items-center justify-between gap-3 mb-3 sm:mb-4">
+      <div class="flex items-center gap-2 sm:gap-3">
+        <input id="symbolInput" class="px-3 py-2 rounded-xl bg-slate-800 text-sm outline-none w-36 sm:w-48"
+               placeholder="SEMBOL (örn: GARAN)" />
+        <button id="goSymbol" class="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-sm">Aç</button>
+      </div>
+      <h1 class="text-lg sm:text-2xl font-bold tracking-tight">
+        /derinlik <span class="text-slate-300">{{ symbol }}</span>
+      </h1>
+      <div class="flex items-center gap-2">
+        <div class="live-pill"><span class="live-dot"></span><span>CANLI</span></div>
+        <a id="snapshot" href="/api/snapshot/depth.png?symbol={{ symbol }}"
+           class="px-3 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 text-sm" target="_blank">Snapshot</a>
       </div>
     </header>
 
     <div id="status" class="text-sm text-slate-300 mb-2">Bağlanıyor…</div>
 
-    <div class="overflow-x-auto rounded-2xl border border-slate-700">
-      <table class="min-w-full divide-y divide-slate-700">
+    <div class="table-wrap rounded-2xl border border-slate-700">
+      <table class="min-w-[640px] w-full divide-y divide-slate-700">
         <thead class="bg-slate-800/60">
           <tr>
-            <th class="px-3 py-2 text-left text-xs sm:text-sm font-semibold">Seviye</th>
+            <!-- Seviye kolonu kaldırıldı -->
             <th class="px-3 py-2 text-left text-xs sm:text-sm font-semibold">Alış Emri#</th>
             <th class="px-3 py-2 text-left text-xs sm:text-sm font-semibold">Alış Miktar</th>
             <th class="px-3 py-2 text-left text-xs sm:text-sm font-semibold">Alış Fiyat</th>
@@ -38,14 +57,13 @@
             <th class="px-3 py-2 text-left text-xs sm:text-sm font-semibold">Satış Emri#</th>
           </tr>
         </thead>
-        <tbody id="tbody" class="divide-y divide-slate-800">
-          <!-- satırlar JS ile dolduruluyor -->
-        </tbody>
+        <tbody id="tbody" class="divide-y divide-slate-800"></tbody>
       </table>
     </div>
 
     <footer class="mt-3 text-xs text-slate-400">
       Canlı 10 kademe derinlik • gerçek zamanlı yayın
+      Developed By Yusufhan Doğan For Borsa Live
     </footer>
   </div>
 </body>
