@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Derinlik</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/static/depth.js" defer></script>
+  <script>window.WS_PATH="{{ websocket_url }}"; window.SYMBOL="{{ symbol }}";</script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100">
+  <div class="max-w-3xl mx-auto p-3 sm:p-4">
+    <header class="flex items-center justify-between mb-3">
+      <div class="flex gap-2 items-center">
+  <input id="symbolInput" class="px-3 py-2 rounded-xl bg-slate-800 text-sm outline-none" placeholder="SEMBOL (örn: GARAN)" />
+  <button id="goSymbol" class="px-3 py-2 rounded-xl bg-slate-700 text-sm">Aç</button>
+</div>
+      <h1 class="text-xl sm:text-2xl font-bold">/{{"derinlik"}} {{ symbol }}</h1>
+      <div class="flex gap-2">
+        <button id="ask-expert" class="px-3 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 text-sm">Uzmana Danış</button>
+        <a id="snapshot" href="/api/snapshot/depth.png?symbol={{ symbol }}" class="px-3 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 text-sm" target="_blank">Snapshot</a>
+      </div>
+    </header>
+
+    <div id="status" class="text-sm text-slate-300 mb-2">Bağlanıyor…</div>
+
+    <div class="overflow-x-auto rounded-2xl border border-slate-700">
+      <table class="min-w-full divide-y divide-slate-700">
+        <thead class="bg-slate-800/60">
+          <tr>
+            <th class="px-3 py-2 text-left text-xs sm:text-sm font-semibold">Seviye</th>
+            <th class="px-3 py-2 text-left text-xs sm:text-sm font-semibold">Alış Emri#</th>
+            <th class="px-3 py-2 text-left text-xs sm:text-sm font-semibold">Alış Miktar</th>
+            <th class="px-3 py-2 text-left text-xs sm:text-sm font-semibold">Alış Fiyat</th>
+            <th class="px-3 py-2 text-left text-xs sm:text-sm font-semibold">Satış Fiyat</th>
+            <th class="px-3 py-2 text-left text-xs sm:text-sm font-semibold">Satış Miktar</th>
+            <th class="px-3 py-2 text-left text-xs sm:text-sm font-semibold">Satış Emri#</th>
+          </tr>
+        </thead>
+        <tbody id="tbody" class="divide-y divide-slate-800">
+          <!-- satırlar JS ile dolduruluyor -->
+        </tbody>
+      </table>
+    </div>
+
+    <footer class="mt-3 text-xs text-slate-400">
+      Canlı 10 kademe derinlik • gerçek zamanlı yayın
+    </footer>
+  </div>
+</body>
+</html>

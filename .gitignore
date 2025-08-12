@@ -1,0 +1,5 @@
+.env
+matriks.proto
+.venv
+__pycache__/
+app/matriks_pb2.py
