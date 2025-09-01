@@ -6,3 +6,5 @@ python-dotenv==1.0.1
 websockets==12.0
 pillow==10.4.0
 protobuf==5.27.3
+playwright==1.54.0
+requests
