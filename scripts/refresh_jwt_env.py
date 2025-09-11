@@ -19,8 +19,8 @@ ENV_PATH         = Path(os.getenv("ENV_PATH", "/borsalive/.env"))
 API_BASE         = os.getenv("API_BASE", "https://borsalive.app")
 ADMIN_API_KEY    = os.getenv("ADMIN_API_KEY", "")  # .env'deki ile aynı olmalı
 MATRIKS_URL      = os.getenv("MATRIKS_URL", "https://app.matrikswebtrader.com/tr/login")
-MATRIKS_USER     = os.getenv("MATRIKS_USER", "355289")
-MATRIKS_PASS     = os.getenv("MATRIKS_PASS", "wt1vU62Y")
+MATRIKS_USER     = os.getenv("MATRIKS_USER", "166152")
+MATRIKS_PASS     = os.getenv("MATRIKS_PASS", "ER1DpeG5")
 PLAYWRIGHT_HEADLESS = os.getenv("PLAYWRIGHT_HEADLESS", "1") != "0"
 
 REQUEST_TIMEOUT  = 30

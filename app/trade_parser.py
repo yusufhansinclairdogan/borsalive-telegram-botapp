@@ -17,6 +17,7 @@ from __future__ import annotations
 import struct
 from typing import Dict, Any, Tuple
 
+
 def _get_varint(b: bytes, i: int) -> Tuple[int, int]:
     """varint -> (value, new_index)"""
     val = 0
@@ -34,11 +35,13 @@ def _get_varint(b: bytes, i: int) -> Tuple[int, int]:
             raise ValueError("varint too long")
     return val, i
 
+
 def _get_len_delimited(b: bytes, i: int) -> Tuple[bytes, int]:
     ln, i = _get_varint(b, i)
     if i + ln > len(b):
         raise ValueError("len-delimited out of range")
-    return b[i:i+ln], i+ln
+    return b[i : i + ln], i + ln
+
 
 def decode_trade(payload: bytes) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
@@ -79,7 +82,7 @@ def decode_trade(payload: bytes) -> Dict[str, Any]:
         elif wtype == 5:  # 32-bit (float)
             if i + 4 > L:
                 break
-            val = struct.unpack("<f", payload[i:i+4])[0]
+            val = struct.unpack("<f", payload[i : i + 4])[0]
             i += 4
             if field_no == 3:
                 out["price"] = float(val)

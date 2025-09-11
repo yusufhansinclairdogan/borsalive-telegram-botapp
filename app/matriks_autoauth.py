@@ -7,7 +7,11 @@ from .config import settings
 
 log = logging.getLogger("autoauth")
 
-_JWT_RE = re.compile(r"\b(jwt|bearer)\s+([A-Za-z0-9_\-\.]+)\.([A-Za-z0-9_\-\.]+)\.([A-Za-z0-9_\-\.]+)\b", re.I)
+_JWT_RE = re.compile(
+    r"\b(jwt|bearer)\s+([A-Za-z0-9_\-\.]+)\.([A-Za-z0-9_\-\.]+)\.([A-Za-z0-9_\-\.]+)\b",
+    re.I,
+)
+
 
 async def fetch_jwt_via_browser(timeout_sec: int = 40) -> Optional[str]:
     """
@@ -45,23 +49,38 @@ async def fetch_jwt_via_browser(timeout_sec: int = 40) -> Optional[str]:
 
         try:
             # Giriş sayfası
-            await page.goto("https://app.matrikswebtrader.com/", timeout=timeout_sec*1000)
+            await page.goto(
+                "https://app.matrikswebtrader.com/", timeout=timeout_sec * 1000
+            )
 
             # Bazı sürümlerde login modal/iframe vs olabilir; yaygın input isimlerine göre brute-find:
             # Kullanıcı adı
-            user_sel_candidates = ["input[name='username']", "input[type='text']",
-                                   "input[placeholder*='Kullanıcı']", "input[placeholder*='User']"]
-            pass_sel_candidates = ["input[name='password']", "input[type='password']",
-                                   "input[placeholder*='Şifre']", "input[placeholder*='Pass']"]
-            login_btn_candidates = ["button[type='submit']",
-                                    "button:has-text('Giriş')",
-                                    "button:has-text('Login')"]
+            user_sel_candidates = [
+                "input[name='username']",
+                "input[type='text']",
+                "input[placeholder*='Kullanıcı']",
+                "input[placeholder*='User']",
+            ]
+            pass_sel_candidates = [
+                "input[name='password']",
+                "input[type='password']",
+                "input[placeholder*='Şifre']",
+                "input[placeholder*='Pass']",
+            ]
+            login_btn_candidates = [
+                "button[type='submit']",
+                "button:has-text('Giriş')",
+                "button:has-text('Login')",
+            ]
 
             async def _first_visible(cands):
                 for s in cands:
                     with contextlib.suppress(Exception):
-                        el = await page.wait_for_selector(s, state="visible", timeout=3000)
-                        if el: return el
+                        el = await page.wait_for_selector(
+                            s, state="visible", timeout=3000
+                        )
+                        if el:
+                            return el
                 return None
 
             uel = await _first_visible(user_sel_candidates)

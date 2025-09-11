@@ -2,18 +2,18 @@
 import uvicorn
 from app.web import app as fastapi_app
 from app.bot import setup_webhook_app, on_startup, on_shutdown
-
-# run.py
-from app.logging_setup import *  # <-- ekle
-from app.web import app as fastapi_app
-import uvicorn
-from app.web import app as fastapi_app
-from app.bot import setup_webhook_app, on_startup, on_shutdown
 from app.logging_setup import *  # noqa
 from app.depth_proxy import token_manager
 from app.auto_jwt_refresher import AutoJWTRefresher
 
+# YENİ: sembol doğrulama router'ı
+from app.routers import symbols as symbols_router
+
 setup_webhook_app(fastapi_app)
+
+# YENİ: router'ı app'e bağla
+fastapi_app.include_router(symbols_router.router)
+
 _refresher = AutoJWTRefresher(token_manager)
 
 @fastapi_app.on_event("startup")

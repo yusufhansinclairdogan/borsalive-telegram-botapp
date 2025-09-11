@@ -1,6 +1,8 @@
+# app/trade_hub.py
 import asyncio
 from collections import deque
 from typing import Dict, Deque, Any, List
+
 
 class TradeHub:
     def __init__(self) -> None:
@@ -18,5 +20,6 @@ class TradeHub:
             if not dq:
                 return []
             return list(dq)[-limit:][::-1]  # en yeniler önde
+
 
 trade_hub = TradeHub()

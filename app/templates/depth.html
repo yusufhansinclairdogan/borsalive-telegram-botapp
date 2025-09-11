@@ -1,112 +1,195 @@
 <!doctype html>
 <html lang="tr" class="">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>{{ symbol }} | Derinlik</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <link rel="stylesheet" href="/static/depth.css" />
+  <link rel="stylesheet" href="/static/depth.css"/>
   <script>
     window.SYMBOL = "{{ symbol }}";
     window.WS_PATH = "{{ websocket_url }}";
     window.WS_TRADE_PATH = "{{ trade_url }}";
     window.WS_MARKET_PATH = "{{ market_url }}";
-    try { if (localStorage.getItem("theme")==="dark") document.documentElement.classList.add("dark"); } catch(e){}
+    /* Backend proxy path — aşağıdaki FastAPI koduyla eşleşiyor */
+    window.SYMBOLS_API = "/api/sectoral-brief";
+    try{ if(localStorage.getItem("theme")==="dark") document.documentElement.classList.add("dark"); }catch(e){}
   </script>
 </head>
 <body>
-  <div class="wrap">
-    <header class="header">
-      <div class="brand">
-        <img id="brandLogo" src="/static/borsalivelogo.jpg" alt="logo" />
-        <div class="title">
-          <span class="sym">{{ symbol }}</span>
-          <span id="headlineLast" class="hl-last">—</span>
-          <span id="headlineDiff" class="hl-diff">—</span>
-          <span id="headlineDiffPct" class="hl-diff">—</span>
-        </div>
+<div class="wrap">
+  <header class="header">
+    <div class="brand">
+      <img id="brandLogo" src="/static/borsalivelogo.jpg" alt="logo"/>
+      <div class="title">
+        <span class="sym">{{ symbol }}</span>
+        <span id="headlineLast" class="hl-last">—</span>
+        <span id="headlineDiff" class="hl-diff">—</span>
+        <span id="headlineDiffPct" class="hl-diff">—</span>
       </div>
-      <div class="controls">
-        <div id="liveBadge" class="badge"><span class="dot"></span><span>CANLI</span></div>
-        <button id="themeToggle" class="theme-switch" aria-label="Tema" title="Tema"><span class="knob"></span></button>
-      </div>
-    </header>
-
-    <div class="status-row">
-      <div id="status">Bağlanıyor…</div>
-
-      <div id="searchWrap" class="search">
-        <button id="searchBtn" class="search-btn" aria-label="Hisse Ara" title="Hisse ara" type="button">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M10 3a7 7 0 015.292 11.708l4 4a1 1 0 01-1.414 1.414l-4-4A7 7 0 1110 3zm0 2a5 5 0 100 10 5 5 0 000-10z"/>
-          </svg>
-          <span class="dot blink"></span>
-        </button>
-        <input id="searchInput" type="text" inputmode="latin" maxlength="12" placeholder="Hisse (örn: GARAN)" class="search-input" />
-      </div>
-
-      <div id="lastUpdate">Son Canlı Veri: —</div>
     </div>
-
-    <!-- PİYASA ÖZETİ -->
-    <section class="snapshot">
-      <button id="snapToggle" class="snap-toggle" aria-expanded="true" type="button">
-        Piyasa Özeti
-        <svg viewBox="0 0 24 24" class="chev" width="18" height="18" aria-hidden="true">
-          <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <div class="controls">
+      <div id="liveBadge" class="badge"><span class="dot"></span><span>CANLI</span></div>
+      <button id="themeToggle" class="theme-switch" aria-label="Tema" title="Tema" type="button">
+        <span class="knob"></span>
+        <svg class="moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z"/>
+        </svg>
+        <svg class="sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M12 4V2m0 20v-2M4.93 4.93L3.51 3.51m16.98 16.98l-1.42-1.42M4 12H2m20 0h-2M4.93 19.07l-1.42 1.42m16.98-16.98l-1.42 1.42M12 8a4 4 0 100 8 4 4 0 000-8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
       </button>
-      <div id="snapBody" class="snap-body open">
+    </div>
+  </header>
+
+  <div class="status-row">
+    <div id="status">Bağlanıyor…</div>
+
+    <div id="searchWrap" class="search">
+      <button id="searchBtn" class="search-btn" aria-label="Hisse Ara" title="Hisse ara" type="button">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <path d="M10 3a7 7 0 015.292 11.708l4 4a1 1 0 01-1.414 1.414l-4-4A7 7 0 1110 3zm0 2a5 5 0 100 10 5 5 0 000-10z"/>
+        </svg>
+        <span class="dot blink"></span>
+      </button>
+      <input id="searchInput" type="text" inputmode="latin" maxlength="12" placeholder="Hisse (örn: GARAN)" class="search-input"/>
+    </div>
+
+    <div id="lastUpdate">Son Canlı Veri: —</div>
+  </div>
+
+  <!-- PİYASA ÖZETİ (yatay kaydırmalı / kompakt) -->
+  <section class="snapshot">
+    <button id="snapToggle" class="snap-toggle" aria-expanded="true" type="button">
+      Piyasa Özeti
+      <svg viewBox="0 0 24 24" class="chev" width="18" height="18" aria-hidden="true">
+        <path d="M7 10l5 5 5-5"/>
+      </svg>
+    </button>
+    <div id="snapBody" class="snap-body open">
+      <div class="snap-scroller">
         <div class="snap-grid">
           <div class="pos"><span>Alış</span><strong id="s_bid">—</strong></div>
           <div class="neg"><span>Satış</span><strong id="s_ask">—</strong></div>
           <div><span>Miktar</span><strong id="s_qty">—</strong></div>
-
           <div><span>Önceki Kapan.</span><strong id="s_prev">—</strong></div>
           <div class="pos"><span>Yüksek</span><strong id="s_high">—</strong></div>
           <div class="neg"><span>Düşük</span><strong id="s_low">—</strong></div>
-
           <div class="pos"><span>Tavan</span><strong id="s_ceil">—</strong></div>
           <div class="neg"><span>Taban</span><strong id="s_floor">—</strong></div>
           <div class="amb"><span>Hacim (TL)</span><strong id="s_turn">—</strong></div>
         </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="tableWrap">
-      <div id="depthEmpty" class="empty-overlay blink">Veri bekleniyor...</div>
-      <table class="depth" aria-label="10 kademe derinlik">
-        <thead>
-          <tr>
-            <th>EMİR</th>
-            <th class="num">MİKTAR</th>
-            <th class="num" style="color:var(--bid)">ALIŞ</th>
-            <th class="num" style="color:var(--ask)">SATIŞ</th>
-            <th class="num">MİKTAR</th>
-            <th class="num">EMİR</th>
-          </tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </section>
+  <section class="tableWrap">
+    <div id="depthEmpty" class="empty-overlay blink">Veri bekleniyor...</div>
+    <table class="depth" aria-label="10 kademe derinlik">
+      <thead>
+        <tr>
+          <th>EMİR</th>
+          <th class="num">MİKTAR</th>
+          <th class="num" style="color:var(--bid)">ALIŞ</th>
+          <th class="num" style="color:var(--ask)">SATIŞ</th>
+          <th class="num">MİKTAR</th>
+          <th class="num">EMİR</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </section>
 
-    <!-- SON İŞLEMLER -->
-    <section class="trades-card">
-      <div class="trades-head">
-        <div class="trades-title">Son İşlemler</div>
-        <div class="trades-head-grid">
-          <div>Saat</div><div>Fiyat</div><div>Miktar</div><div>Alıcı</div><div>Satıcı</div>
-        </div>
+  <!-- SON İŞLEMLER -->
+  <section class="trades-card">
+    <div class="trades-head">
+      <div class="trades-title">Son İşlemler</div>
+      <div class="trades-head-grid">
+        <div>Saat</div><div>Fiyat</div><div>Miktar</div><div>Alıcı</div><div>Satıcı</div>
       </div>
-      <div class="trades-body">
-        <ul id="tradesList" class="trades-list"></ul>
-        <div id="tradesEmpty" class="trades-empty blink">Veri bekleniyor…</div>
-      </div>
-    </section>
+    </div>
+    <div class="trades-body">
+      <ul id="tradesList" class="trades-list"></ul>
+      <div id="tradesEmpty" class="trades-empty blink">Veri bekleniyor…</div>
+    </div>
+  </section>
 
-    <footer>Mini uygulama • 10 kademe • gerçek zamanlı<br/>App By Yusufhan Doğan For Borsa Live 2025</footer>
+  <footer>Mini uygulama • 10 kademe • gerçek zamanlı<br/>App By Yusufhan Doğan For Borsa Live 2025</footer>
+</div>
+
+<!-- Geçersiz sembol modal
+<div id="symModalBackdrop" class="modal-backdrop" hidden>
+  <div class="modal">
+    <div class="modal-title">Geçersiz Hisse Sembolü</div>
+    <div class="modal-text">Girdiğiniz kod hatalı veya desteklenmiyor.</div>
+    <button id="symModalOk" class="modal-ok" type="button">Tamam</button>
+  </div>
+</div> -->
+<!-- Slide-in Left Drawer -->
+<div id="drawer" class="drawer">
+  <div class="drawer-header">
+    <img src="/static/logo.svg" alt="BorsaLive" class="drawer-logo">
+    <button id="drawerClose" aria-label="Kapat">&times;</button>
   </div>
 
-  <script src="/static/depth.js" defer></script>
+  <nav class="drawer-nav">
+    <a class="drawer-item" href="/webapp/depth?symbol={{ symbol }}">
+      <span class="icon">📊</span>
+      <span>Derinlik</span>
+    </a>
+    <a class="drawer-item" href="/webapp/akd?symbol={{ symbol }}">
+      <span class="icon">🏦</span>
+      <span>AKD (Aracı Kurum Dağılımı)</span>
+    </a>
+  </nav>
+
+  <div class="drawer-footer">
+    <div>Borsa Live</div>
+    <div>App By Yusufhan Doğan</div>
+    <div>2025</div>
+  </div>
+</div>
+
+<!-- Backdrop -->
+<div id="backdrop" class="backdrop"></div>
+
+<!-- Sticky Bottom Bar -->
+<div id="bottombar" class="bottombar">
+  <button id="btnMenu" class="bb-item" aria-label="Menü">
+    <span class="bb-ico">☰</span>
+    <span class="bb-txt">Menü</span>
+  </button>
+  <a href="/webapp/depth?symbol={{ symbol }}" class="bb-item" aria-label="Ana Sayfa">
+    <span class="bb-ico">🏠</span>
+    <span class="bb-txt">Ana Sayfa</span>
+  </a>
+  <button id="btnInfo" class="bb-item" aria-label="Bilgi">
+    <span class="bb-ico">ℹ️</span>
+    <span class="bb-txt">Bilgi</span>
+  </button>
+</div>
+
+<script src="/static/depth.js" defer></script>
 </body>
 </html>
+
+
+    <!-- :root {
+      --bg: #001327dd;
+      --panel: #0084ff00;
+      /* glass */
+      --panel-solid: #fdfdfd;
+      --muted: #a8b2be;
+      --text: #eaf0f8;
+      --line: #35424d;
+      --green: #22c55e;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --chip: #1a2430cc;
+      --chip-ghost: #0f1620;
+      --input: #0f1620;
+      --legend-bg: #002e7493;
+      --card-blur: 25px;
+      --radius: 18px;
+      --shadow: 0 10px 30px rgba(0, 22, 93, 0.616);
+    } -->

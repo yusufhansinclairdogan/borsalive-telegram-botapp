@@ -1,6 +1,8 @@
+# app/depth_hub.py
 import asyncio
 from typing import Dict, List, Any
 from time import time
+
 
 class DepthHub:
     def __init__(self) -> None:
@@ -9,7 +11,7 @@ class DepthHub:
 
     async def set(self, symbol: str, levels: List[Dict[str, Any]]) -> None:
         async with self._lock:
-            self._store[symbol] = {"levels": levels, "ts": int(time()*1000)}
+            self._store[symbol] = {"levels": levels, "ts": int(time() * 1000)}
 
     async def get_last(self, symbol: str, timeout: float = 0.0):
         # timeout param’ı API uyumu için; burada kullanılmıyor
@@ -21,5 +23,6 @@ class DepthHub:
         async with self._lock:
             d = self._store.get(symbol)
             return d["ts"] if d else None
+
 
 hub = DepthHub()

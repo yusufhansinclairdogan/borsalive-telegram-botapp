@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="tr" data-theme="dark">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PGÇ • Borsa Live</title>
+    <style>
+        :root {
+            --bg: #0c1218;
+            --panel: #141b22cc;
+            --panel-solid: #141b22;
+            --muted: #a8b2be;
+            --text: #eaf0f8;
+            --line: #35424d88;
+            --green: #22c55e;
+            --red: #ef4444;
+            --amber: #f59e0b;
+            --blur: 12px;
+            --r: 18px;
+            --chip: #1a2430cc;
+            --shadow: 0 8px 24px rgba(0, 0, 0, .18);
+        }
+
+        [data-theme="light"] {
+            --bg: #f6f8fb;
+            --panel: #ffffffcc;
+            --panel-solid: #fff;
+            --muted: #5a6b7c;
+            --text: #0f1720;
+            --line: #e3eaf2;
+            --chip: #ffffffcc;
+            --shadow: 0 8px 24px rgba(15, 23, 32, .08);
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        html,
+        body {
+            height: 100%
+        }
+
+        body {
+            margin: 0;
+            background: radial-gradient(1200px 800px at 80% -10%, #1b2734 0%, #0f1620 40%, var(--bg) 70%) fixed;
+            color: var(--text);
+            font: 15.5px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        }
+
+        [data-theme="light"] body {
+            background: #f6f8fb
+        }
+
+        /* Watermark now FRONT (but pointer-events:none) */
+        .wm {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transform: rotate(-24deg);
+            opacity: .16;
+            letter-spacing: .5px;
+            text-align: center;
+            font-weight: 900;
+            font-size: 46px;
+            color: #ffffff;
+            z-index: 1000;
+            mix-blend-mode: overlay
+        }
+
+        [data-theme="light"] .wm {
+            color: #0f1720;
+            opacity: .08;
+            mix-blend-mode: normal
+        }
+
+        .wrap {
+            max-width: 1200px;
+            margin: 22px auto 120px;
+            padding: 0 16px;
+            position: relative;
+            z-index: 1
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: var(--r);
+            backdrop-filter: blur(var(--blur));
+            -webkit-backdrop-filter: blur(var(--blur));
+            padding: 14px;
+            box-shadow: var(--shadow)
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px
+        }
+
+        .logo img {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            object-fit: cover
+        }
+
+        .title strong {
+            font-size: 20px
+        }
+
+        .muted {
+            color: var(--muted);
+            font-size: 12px
+        }
+
+        /* Drawer (theme-aware) */
+        .drawer {
+            position: fixed;
+            inset: 0;
+            display: none;
+            z-index: 60
+        }
+
+        .drawer.open {
+            display: block
+        }
+
+        .drawer .backdrop {
+            position: absolute;
+            inset: 0;
+            background: #0007;
+            animation: fade .22s ease
+        }
+
+        .drawer .panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: min(86vw, 360px);
+            background: rgba(20, 27, 34, .92);
+            border-right: 1px solid var(--line);
+            backdrop-filter: blur(20px);
+            padding: 18px;
+            transform: translateX(-6%);
+            animation: slide .25s ease forwards
+        }
+
+        [data-theme="light"] .drawer .panel {
+            background: #fffffff2
+        }
+
+        @keyframes fade {
+            from {
+                opacity: 0
+            }
+
+            to {
+                opacity: 1
+            }
+        }
+
+        @keyframes slide {
+            to {
+                transform: translateX(0)
+            }
+        }
+
+        .menu-items {
+            margin-top: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px
+        }
+
+        .menu-item {
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            display: flex;
+            gap: 10px;
+            color: var(--text);
+            text-decoration: none
+        }
+
+        .menu-item:hover {
+            background: #ffffff14;
+            border-color: #ffffff26
+        }
+
+        [data-theme="light"] .menu-item:hover {
+            background: #eef3f9;
+            border-color: #e3eaf2
+        }
+
+        .menu-footer {
+            position: absolute;
+            left: 18px;
+            right: 18px;
+            bottom: 18px;
+            color: var(--muted);
+            font-size: 12px
+        }
+
+        .btn {
+            border-radius: 12px;
+            padding: 10px 14px;
+            border: 1px solid var(--line);
+            background: var(--chip);
+            color: var(--text);
+            cursor: pointer;
+            font-weight: 800;
+            transition: transform .12s ease, box-shadow .12s ease
+        }
+
+        .btn:hover {
+            transform: translateY(-1px)
+        }
+
+        .btn:active {
+            transform: translateY(0)
+        }
+
+        .btn.primary {
+            background: #233043
+        }
+
+        [data-theme="light"] .btn.primary {
+            background: #0f1720;
+            color: #fff;
+            border-color: #0f1720
+        }
+
+        .ghost {
+            background: transparent
+        }
+
+        /* Filters */
+        .filters {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr auto;
+            gap: 10px;
+            margin-top: 10px
+        }
+
+        @media (max-width:1000px) {
+            .filters {
+                grid-template-columns: 1fr 1fr 1fr
+            }
+        }
+
+        @media (max-width:700px) {
+            .filters {
+                grid-template-columns: 1fr 1fr
+            }
+        }
+
+        .fld {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            position: relative
+        }
+
+        .fld label {
+            font-size: 12px;
+            color: var(--muted)
+        }
+
+        .fld input,
+        .fld select,
+        .fld button {
+            width: 100%;
+            background: #0f1620;
+            border: 1px solid #2a3541;
+            color: var(--text);
+            border-radius: 12px;
+            padding: 10px 12px;
+            outline: none
+        }
+
+        [data-theme="light"] .fld input,
+        [data-theme="light"] .fld select {
+            background: #fff;
+            border-color: #e3eaf2;
+            color: #0f1720
+        }
+
+        .fld input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1) opacity(.8)
+        }
+
+        [data-theme="light"] .fld input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: none
+        }
+
+        /* Summary strip (scrollable) */
+        .summary {
+            margin-top: 12px;
+            overflow: auto;
+            white-space: nowrap
+        }
+
+        .summary h3 {
+            margin: 0 0 8px 0;
+            font-size: 16px
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0 8px 8px 0;
+            padding: 10px 12px;
+            border-radius: 999px;
+            font-weight: 700;
+            border: 1px solid var(--line)
+        }
+
+        .pill.k {
+            background: #10251a;
+            color: #b9f6c3;
+            border-color: #194a2c
+        }
+
+        .pill.s {
+            background: #2a0e11;
+            color: #ffd1d6;
+            border-color: #5a1c23
+        }
+
+        .pill.v {
+            background: #0e2331;
+            color: #bfe8ff;
+            border-color: #1b425a
+        }
+
+        .pill.p {
+            background: #2a2811;
+            color: #fff1a6;
+            border-color: #5b571d
+        }
+
+        [data-theme="light"] .pill.k {
+            background: #e9fff0;
+            color: #105a2d;
+            border-color: #bce8cc
+        }
+
+        [data-theme="light"] .pill.s {
+            background: #ffeaee;
+            color: #7a1220;
+            border-color: #f5c2cb
+        }
+
+        [data-theme="light"] .pill.v {
+            background: #ebf7ff;
+            color: #0b3d57;
+            border-color: #cbe6f7
+        }
+
+        [data-theme="light"] .pill.p {
+            background: #fff7d6;
+            color: #6b5a0b;
+            border-color: #efe2a7
+        }
+
+        /* Main table */
+        .table-card {
+            margin-top: 12px
+        }
+
+        .twrap {
+            position: relative;
+            overflow: auto;
+            border-radius: 12px
+        }
+
+        .twrap.scrolling::after {
+            content: "◄ Kaydır";
+            position: absolute;
+            right: 10px;
+            top: 0.5px;
+            font-size: 12px;
+            color: var(--muted);
+            animation: hint 1.8s ease infinite
+        }
+
+        @keyframes hint {
+            0% {
+                transform: translateX(0)
+            }
+
+            50% {
+                transform: translateX(-8px)
+            }
+
+            100% {
+                transform: translateX(0)
+            }
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 14px;
+            min-width: 900px
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            background: #0f1620;
+            color: var(--muted);
+            padding: 10px 12px;
+            border-bottom: 1px solid #203040;
+            text-align: left;
+            user-select: none
+        }
+
+        [data-theme="light"] thead th {
+            background: #f7f9fc;
+            border-color: #e7edf4;
+            color: #577
+        }
+
+        tbody td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #1d2732
+        }
+
+        [data-theme="light"] tbody td {
+            border-color: #eef2f6
+        }
+
+        tbody tr:nth-child(2n) {
+            background: #101925
+        }
+
+        [data-theme="light"] tbody tr:nth-child(2n) {
+            background: #fff
+        }
+
+        tbody tr:hover {
+            background: #162232
+        }
+
+        [data-theme="light"] tbody tr:hover {
+            background: #f0f6ff
+        }
+
+        .right {
+            text-align: right
+        }
+
+        /* Expand row (buyers/sellers) */
+        .exp {
+            overflow: hidden;
+            transition: max-height .28s ease, opacity .18s ease;
+            max-height: 0;
+            opacity: .0;
+            background: transparent
+        }
+
+        .exp.open {
+            max-height: 420px;
+            opacity: 1
+        }
+
+        .bswrap {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 10px
+        }
+
+        @media (max-width:700px) {
+            .bswrap {
+                grid-template-columns: 1fr
+            }
+        }
+
+        .bstable {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            overflow: auto
+        }
+
+        .bstable table {
+            min-width: 520px
+        }
+
+        .bstable thead th {
+            background: #0f1620
+        }
+
+        [data-theme="light"] .bstable thead th {
+            background: #f7f9fc
+        }
+
+        .buy th,
+        .buy td {
+            color: #b9f6c3
+        }
+
+        [data-theme="light"] .buy th,
+        .buy td {
+            color: #00ff2a
+        }
+
+        .sell th,
+        .sell td {
+            color: #ffd1d6
+        }
+
+        [data-theme="light"] .sell th,
+        .sell td {
+            color: rgb(255, 0, 34)
+        }
+
+        /* Pagination - sticky above bottom bar */
+        .pager {
+            position: sticky;
+            bottom: 96px;
+            /* bottom bar height + margin */
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 10px;
+            z-index: 40
+        }
+
+        .pager .pbtn {
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            background: var(--chip);
+            font-weight: 800;
+            cursor: pointer
+        }
+
+        .pager .pbtn[disabled] {
+            opacity: .5;
+            cursor: not-allowed
+        }
+
+        .pager .info {
+            padding: 8px 12px;
+            color: var(--muted);
+            font-weight: 700
+        }
+
+        /* Bottom bar (pro) */
+        .bottom {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 12px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            z-index: 50
+        }
+
+        .chip {
+            backdrop-filter: blur(var(--blur));
+            -webkit-backdrop-filter: blur(var(--blur));
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 10px 16px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            cursor: pointer;
+            font-weight: 700;
+            box-shadow: var(--shadow)
+        }
+
+        .chip.primary {
+            background: #233043
+        }
+
+        [data-theme="light"] .chip.primary {
+            background: #0f1720;
+            color: #fff
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            right: 18px;
+            bottom: 88px;
+            z-index: 70;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: #1f2a36;
+            border: 1px solid #394756;
+            color: #fff;
+            display: none
+        }
+
+        .toast.show {
+            display: block
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wm">Borsa Live App <small>By Yusufhan Doğan</small></div>
+
+    <!-- Drawer -->
+    <div id="drawer" class="drawer" aria-hidden="true">
+        <div class="backdrop" data-close></div>
+        <div class="panel">
+            <div class="logo">
+                <img src="borsalive/app/static/borsalivelogo.jpg" alt="logo" />
+                <div style="font-weight:800">Borsa Live</div>
+            </div>
+            <div class="menu-items">
+                <a class="menu-item" id="go-depth">📊 <span>Derinlik</span></a>
+                <a class="menu-item" id="go-akd">🧩 <span>Aracı Kurum Dağılımı</span></a>
+                <a class="menu-item" id="go-takas">📑 <span>Takas</span></a>
+                <button class="menu-item" id="themeSwitch">🌓 <span>Koyu/Açık Tema</span></button>
+            </div>
+            <div class="menu-footer">Borsa Live — App By Yusufhan Doğan © 2025</div>
+        </div>
+    </div>
+
+    <div class="wrap">
+        <div class="card">
+            <div class="header">
+                <div class="logo">
+                    <img src="/borsalive/app/static/borsalivelogo.jpg" alt="bl">
+                    <div class="title"><strong>Para Giriş-Çıkış</strong>
+                        <div id="asOf" class="muted">—</div>
+                    </div>
+                </div>
+                <div>
+                    <button id="btnMenu" class="btn">☰ Menü</button>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="filters">
+                <div class="fld">
+                    <label>Kurum</label>
+                    <input id="top" type="number" value="5" min="1" max="20" />
+                </div>
+                <div class="fld">
+                    <label>Sembol Tipi</label>
+                    <select id="symType">
+                        <option value="T,S,V,M,R">Hepsi</option>
+                        <option value="S">Hisse</option>
+                        <option value="V">Varant</option>
+                        <option value="M">Borsa Yatırım Fonu</option>
+                        <option value="T">Temerrüt</option>
+                        <option value="R">Rüçhan</option>
+                    </select>
+                </div>
+                <div class="fld">
+                    <label>Periyot</label>
+                    <select id="period">
+                        <option value="date">Tarih Aralığı</option>
+                        <option value="5">Son 5 Dak.</option>
+                        <option value="10">Son 10 Dak.</option>
+                        <option value="15">Son 15 Dak.</option>
+                        <option value="20">Son 20 Dak.</option>
+                        <option value="25">Son 25 Dak.</option>
+                        <option value="30">Son 30 Dak.</option>
+                        <option value="45">Son 45 Dak.</option>
+                        <option value="60">Son 60 Dak.</option>
+                    </select>
+                </div>
+                <div class="fld">
+                    <label>Başlangıç Tarihi</label>
+                    <input type="date" id="dStart">
+                </div>
+                <div class="fld">
+                    <label>Bitiş Tarihi</label>
+                    <input type="date" id="dEnd">
+                </div>
+                <div class="fld" style="align-self:end">
+                    <button id="btnApply" class="btn primary">Uygula</button>
+                </div>
+            </div>
+
+            <!-- Summary strip -->
+            <div class="summary">
+                <h3>Takas Özeti</h3>
+                <div id="sumRow">
+                    <!-- pills injected -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Symbols table -->
+        <div class="card table-card">
+            <div class="twrap" id="twrap">
+                <table id="tbl">
+                    <thead>
+                        <tr>
+                            <th data-k="sym">Sembol</th>
+                            <th class="right" data-k="PGC">Para G.Ç.</th>
+                            <th class="right" data-k="netBidV">Alış N.Hacim</th>
+                            <th class="right" data-k="bidAvr">Alış Ort.</th>
+                            <th class="right" data-k="bidP">Alış %</th>
+                            <th class="right" data-k="netAskV">Satış N.Hacim</th>
+                            <th class="right" data-k="askAvr">Satış Ort.</th>
+                            <th class="right" data-k="askP">Satış %</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody"></tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pager" id="pager">
+                <button class="pbtn" id="first">⏮ İlk</button>
+                <button class="pbtn" id="prev">◀ Önceki</button>
+                <div class="info" id="pgInfo">—</div>
+                <button class="pbtn" id="next">Sonraki ▶</button>
+                <button class="pbtn" id="last">Son ⏭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom bar -->
+    <div class="bottom">
+        <div class="chip" id="chipMenu">☰ Menü</div>
+        <div class="chip primary" id="chipHome">Ana Sayfa</div>
+        <div class="chip" id="chipInfo">Bilgi</div>
+    </div>
+
+    <div id="toast" class="toast">Hata</div>
+
+    <script>
+        /* ===== State & helpers ===== */
+        const qs = s => document.querySelector(s), qsa = s => Array.from(document.querySelectorAll(s));
+        const state = {
+            apiBase: "{{ api_base }}",
+            webBase: "{{ webapp_base }}",
+            theme: localStorage.getItem("akd-theme") || "dark",
+            rows: [],
+            page: 1, per: 6,
+            sortKey: "PGC", sortDir: -1, // default: para gç desc
+        };
+        document.documentElement.setAttribute("data-theme", state.theme);
+
+        function todayISO() { return new Date().toISOString().slice(0, 10); }
+        function fmtQty(n) { if (n == null) return "—"; n = Number(n) || 0; return n.toLocaleString("tr-TR"); }
+        function fmtNum(n, p = 2) { if (n == null || isNaN(n)) return "—"; return Number(n).toLocaleString("tr-TR", { minimumFractionDigits: p, maximumFractionDigits: p }); }
+        function showToast(msg) { const t = qs("#toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 1800); }
+
+        /* ===== Menu & Theme ===== */
+        const drawer = qs("#drawer"); const openDrawer = () => drawer.classList.add("open"); const closeDrawer = () => drawer.classList.remove("open");
+        qs("#btnMenu").onclick = openDrawer; qs("#chipMenu").onclick = openDrawer;
+        drawer.addEventListener("click", e => { if (e.target.matches("[data-close]")) closeDrawer(); });
+        qs("#themeSwitch").onclick = () => { state.theme = (state.theme === "dark" ? "light" : "dark"); document.documentElement.setAttribute("data-theme", state.theme); localStorage.setItem("akd-theme", state.theme); };
+        qs("#go-depth").onclick = () => location.href = `${state.webBase}/webapp/depth?symbol=ASELS`;
+        qs("#go-akd").onclick = () => location.href = `${state.webBase}/webapp/akd?symbol=ASELS`;
+        qs("#go-takas").onclick = closeDrawer;
+
+        /* ===== Table sorting ===== */
+        qsa("#tbl thead th").forEach(th => {
+            th.addEventListener("click", () => {
+                const k = th.dataset.k; if (!k) return;
+                if (state.sortKey === k) { state.sortDir *= -1 } else { state.sortKey = k; state.sortDir = (k === "sym" ? 1 : -1); }
+                renderBody();
+            });
+        });
+
+        /* ===== Fetch PGC ===== */
+        function buildParams() {
+            const symType = qs("#symType").value || "T,S,V,M,R";
+            const top = Math.max(1, Math.min(parseInt(qs("#top").value || 5, 10), 20));
+            const p = new URLSearchParams({ symbolType: symType, top: String(top) });
+            const pd = qs("#period").value;
+            if (pd === "date") {
+                const s = qs("#dStart").value || todayISO(), e = qs("#dEnd").value || todayISO();
+                p.set("start", s); p.set("end", e);
+            } else {
+                const mins = parseInt(pd, 10);
+                const now = Math.floor(Date.now() / 1000);
+                p.set("startSeconds", String(now - mins * 60));
+                p.set("endSeconds", String(now));
+            }
+            return p.toString();
+        }
+        async function fetchPGC() {
+            const url = `${state.apiBase}/api/pgc?${buildParams()}`;
+            const r = await fetch(url);
+            if (!r.ok) { showToast("Veri alınamadı"); return null; }
+            return await r.json();
+        }
+
+        /* ===== Map / Render ===== */
+        function mapRows(obj) {
+            const arr = (obj.all || []).map(x => ({
+                sym: x.sym, PGC: x.PGC, netBidV: x.netBidV, bidAvr: x.bidAvr, bidP: x.bidP,
+                netAskV: x.netAskV, askAvr: x.askAvr, askP: x.askP, bid: x.bid || [], ask: x.ask || []
+            }));
+            return arr;
+        }
+        function sortRows(rows) {
+            const k = state.sortKey, d = state.sortDir;
+            rows.sort((a, b) => {
+                const va = a[k], vb = b[k];
+                if (typeof va === "string" || typeof vb === "string") { return String(va).localeCompare(String(vb), "tr") * d; }
+                return ((va || 0) - (vb || 0)) * d;
+            });
+        }
+        function renderSummary(obj) {
+            qs("#asOf").textContent = (obj.startDate || todayISO()) + (obj.endDate && obj.endDate !== obj.startDate ? " ~ " + obj.endDate : "");
+            const s = obj.sums?.all || {};
+            const rest = obj.sums?.rest || {};
+            const row = qs("#sumRow");
+            row.innerHTML = `
+    <span class="pill k">Alış N.Hacim: ${fmtNum(s.netBidV, 0)}₺</span>
+    <span class="pill s">Satış N.Hacim: ${fmtNum(s.netAskV, 0)}₺</span>
+    <span class="pill v">Toplam Hacim: ${fmtNum(s.totV, 0)}₺</span>
+    <span class="pill p">PGÇ: ${fmtNum(s.PGC, 0)}₺</span>
+  `;
+        }
+        function pageSlice(rows) {
+            const total = rows.length;
+            const pages = Math.max(1, Math.ceil(total / state.per));
+            if (state.page > pages) state.page = pages;
+            const a = (state.page - 1) * state.per, b = a + state.per;
+            return { rows: rows.slice(a, b), total, pages };
+        }
+        function renderBody() {
+            const rows = [...state.rows];
+            sortRows(rows);
+            const { rows: pageRows, total, pages } = pageSlice(rows);
+            const tb = qs("#tbody"); tb.innerHTML = "";
+            pageRows.forEach(r => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+      <td><button class="btn ghost" data-exp="${r.sym}" style="padding:0 6px">▸</button> ${r.sym}</td>
+      <td class="right">${fmtNum(r.PGC, 0)}</td>
+      <td class="right">${fmtNum(r.netBidV, 0)}</td>
+      <td class="right">${fmtNum(r.bidAvr, 3)}</td>
+      <td class="right">${fmtNum(r.bidP, 2)}</td>
+      <td class="right">${fmtNum(r.netAskV, 0)}</td>
+      <td class="right">${fmtNum(r.askAvr, 3)}</td>
+      <td class="right">${fmtNum(r.askP, 2)}</td>
+    `;
+                tb.appendChild(tr);
+
+                // expandable row (aligned buyers/sellers)
+                const exp = document.createElement("tr");
+                exp.innerHTML = `<td colspan="8">
+      <div class="exp" id="exp-${r.sym}">
+        <div class="bswrap">
+          <div class="bstable buy">
+            <table>
+              <thead><tr><th>Alıcılar</th><th class="right">Net Hacim</th><th class="right">Yüzde</th><th class="right">Net Adet</th></tr></thead>
+              <tbody>
+                ${r.bid.map(b => `<tr><td>${b.code}</td><td class="right">${fmtNum(b.netV, 0)}</td><td class="right">${fmtNum(b.per, 2)}</td><td class="right">${fmtQty(b.netQ)}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          </div>
+          <div class="bstable sell">
+            <table>
+              <thead><tr><th>Satıcılar</th><th class="right">Net Hacim</th><th class="right">Yüzde</th><th class="right">Net Adet</th></tr></thead>
+              <tbody>
+                ${r.ask.map(s => `<tr><td>${s.code}</td><td class="right">${fmtNum(s.netV, 0)}</td><td class="right">${fmtNum(s.per, 2)}</td><td class="right">${fmtQty(s.netQ)}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </td>`;
+                tb.appendChild(exp);
+            });
+
+            // expand handlers
+            qsa('[data-exp]').forEach(btn => {
+                btn.onclick = () => {
+                    const sym = btn.dataset.exp;
+                    const box = qs(`#exp-${sym}`);
+                    const open = box.classList.toggle("open");
+                    btn.textContent = open ? "▾" : "▸";
+                };
+            });
+
+            // pager
+            qs("#pgInfo").textContent = `${state.page}/${pages} • ${total} sembol`;
+            qs("#first").disabled = qs("#prev").disabled = state.page <= 1;
+            qs("#last").disabled = qs("#next").disabled = state.page >= pages;
+        }
+
+        /* ===== Pagination buttons ===== */
+        qs("#first").onclick = () => { state.page = 1; renderBody(); };
+        qs("#prev").onclick = () => { state.page = Math.max(1, state.page - 1); renderBody(); };
+        qs("#next").onclick = () => { state.page = state.page + 1; renderBody(); };
+        qs("#last").onclick = () => { const pages = Math.max(1, Math.ceil(state.rows.length / state.per)); state.page = pages; renderBody(); };
+
+        /* ===== Apply / Load ===== */
+        async function loadAll() {
+            // dates
+            const t = todayISO(); const s = qs("#dStart"), e = qs("#dEnd");
+            s.max = t; e.max = t; if (!s.value) s.value = t; if (!e.value) e.value = t; if (s.value > e.value) e.value = s.value;
+
+            const data = await fetchPGC();
+            if (!data) { return; }
+            state.rows = mapRows(data);
+            renderSummary(data);
+            renderBody();
+
+            // table scroll hint
+            const wrap = qs("#twrap");
+            const need = wrap.scrollWidth > wrap.clientWidth;
+            wrap.classList.toggle("scrolling", need);
+        }
+
+        qs("#btnApply").onclick = () => { state.page = 1; loadAll(); };
+
+        /* ===== Init ===== */
+        window.addEventListener("load", () => { loadAll(); });
+    </script>
+</body>
+
+</html>

@@ -1,6 +1,7 @@
 # app/mqtt_subscribe_chunked.py
 from typing import List
 
+
 def _enc_vlq(n: int) -> bytes:
     # MQTT remaining length (varint)
     out = bytearray()
@@ -14,12 +15,15 @@ def _enc_vlq(n: int) -> bytes:
             break
     return bytes(out)
 
+
 def _enc_u16(n: int) -> bytes:
     return n.to_bytes(2, "big")
+
 
 def _enc_topic(t: str) -> bytes:
     b = t.encode("utf-8")
     return _enc_u16(len(b)) + b
+
 
 def _build_sub_body(packet_id: int, topic: str, qos: int = 0) -> bytes:
     # Variable header (2) + payload(topic len+data + qos)
@@ -27,6 +31,7 @@ def _build_sub_body(packet_id: int, topic: str, qos: int = 0) -> bytes:
     body = _enc_u16(packet_id) + payload
     rl = _enc_vlq(len(body))
     return rl + body
+
 
 def build_chunked_subscribe(topics: List[str], base_packet_id: int) -> bytes:
     """

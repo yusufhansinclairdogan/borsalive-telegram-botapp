@@ -19,6 +19,7 @@ log = logging.getLogger("trade_proxy")
 
 # -------------------- low-level helpers --------------------
 
+
 async def _send(ws, b: bytes, note: str = ""):
     """ws.send() sarmalayıcısı: kısa base64 log yazar."""
     try:
@@ -31,6 +32,7 @@ async def _send(ws, b: bytes, note: str = ""):
     except Exception as e:
         log.error("send fail (%s): %s\n%s", note, e, traceback.format_exc())
         raise
+
 
 def _read_vlq(buf: bytes, i: int) -> tuple[int, int]:
     """MQTT Remaining Length (VLQ) decode."""
@@ -51,6 +53,7 @@ def _read_vlq(buf: bytes, i: int) -> tuple[int, int]:
             raise ValueError("VLQ too large")
     return val, n
 
+
 def _enc_vlq(n: int) -> bytes:
     out = bytearray()
     while True:
@@ -63,12 +66,15 @@ def _enc_vlq(n: int) -> bytes:
             break
     return bytes(out)
 
+
 def _looks_connack(b: bytes) -> bool:
     # 0x20 (CONNACK), rem.len >= 2, flags=0x00, rc=0x00
     return len(b) >= 4 and b[0] == 0x20 and b[1] >= 2 and b[2] == 0x00 and b[3] == 0x00
 
+
 def _looks_suback(b: bytes) -> bool:
     return len(b) >= 4 and ((b[0] >> 4) & 0x0F) == 0x09  # SUBACK
+
 
 def _iter_publish_payloads(ws_frame: bytes):
     """
@@ -131,10 +137,12 @@ def _iter_publish_payloads(ws_frame: bytes):
         log.debug("TRADE PUBLISH topic=%s len=%d", topic, len(payload))
         yield (topic, payload)
 
+
 # Trade de aynı JWT’yi kullanıyoruz.
 token_manager = TokenManager(initial_jwt=settings.INITIAL_JWT)
 
 # -------------------- client --------------------
+
 
 class MatrixTradeClient:
     """
@@ -142,16 +150,26 @@ class MatrixTradeClient:
     CONNECT template içine JWT dinamik gömülür.
     SUBSCRIBE gövdesi aynı anda birden fazla olası topic’e abone olacak şekilde hazırlanır.
     """
+
     def __init__(self, symbol: str, connect_template_b64: Optional[str] = None):
         self.symbol = symbol.upper()
 
-        self.url = getattr(settings, "MATRIX_TRADE_URL", None) or "wss://rtstream.radix.matriksdata.com/trade"
+        self.url = (
+            getattr(settings, "MATRIX_TRADE_URL", None)
+            or "wss://rtstream.radix.matriksdata.com/trade"
+        )
         self.origin = settings.MATRIX_ORIGIN
         self.subprotocol = settings.MATRIX_SUBPROTOCOL
 
         # Öncelik: parametre > .env TRADE_CONNECT_TEMPLATE_B64 > .env CONNECT_TEMPLATE_B64
-        tmpl_b64 = connect_template_b64 or getattr(settings, "TRADE_CONNECT_TEMPLATE_B64", "") or settings.CONNECT_TEMPLATE_B64
-        self.connect_template: Optional[bytes] = base64.b64decode(tmpl_b64) if tmpl_b64 else None
+        tmpl_b64 = (
+            connect_template_b64
+            or getattr(settings, "TRADE_CONNECT_TEMPLATE_B64", "")
+            or settings.CONNECT_TEMPLATE_B64
+        )
+        self.connect_template: Optional[bytes] = (
+            base64.b64decode(tmpl_b64) if tmpl_b64 else None
+        )
 
         # Debug amaçlı saklayalım
         self.subscribe_body: Optional[bytes] = None
@@ -165,7 +183,10 @@ class MatrixTradeClient:
         if env_fmt:
             # örn: "mx/trade/{sym}@lvl2,mx/trade/{sym},mx/trades/{sym}@lvl2"
             fmts = [s.strip() for s in env_fmt.split(",") if s.strip()]
-            return [f.replace("{sym}", self.symbol).replace("{symbol}", self.symbol) for f in fmts]
+            return [
+                f.replace("{sym}", self.symbol).replace("{symbol}", self.symbol)
+                for f in fmts
+            ]
 
         # Varsayılan deneme seti (en yaygın varyantlar)
         return [
@@ -201,7 +222,9 @@ class MatrixTradeClient:
 
             # 2) CONNECT (template + JWT)
             if not self.connect_template:
-                raise RuntimeError("CONNECT template yok (TRADE_CONNECT_TEMPLATE_B64/CONNECT_TEMPLATE_B64).")
+                raise RuntimeError(
+                    "CONNECT template yok (TRADE_CONNECT_TEMPLATE_B64/CONNECT_TEMPLATE_B64)."
+                )
 
             jwt = token_manager.get()
             if not jwt:

@@ -1,6 +1,7 @@
 import asyncio
 from typing import Dict, Any, Optional
 
+
 class QuoteHub:
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
@@ -13,5 +14,6 @@ class QuoteHub:
     async def get(self, symbol: str) -> Optional[Dict[str, Any]]:
         async with self._lock:
             return self._q.get(symbol)
+
 
 quote_hub = QuoteHub()
