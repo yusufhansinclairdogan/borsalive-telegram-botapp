@@ -15,5 +15,10 @@ class QuoteHub:
         async with self._lock:
             return self._q.get(symbol)
 
+    async def snapshot(self) -> Dict[str, Dict[str, Any]]:
+        """Return a shallow copy of the current quote map."""
+        async with self._lock:
+            return dict(self._q)
+
 
 quote_hub = QuoteHub()

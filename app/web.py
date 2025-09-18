@@ -9,11 +9,14 @@ from fastapi import (
     HTTPException,
     Query,
 )
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Set
 import asyncio
 import base64
 import struct
 import time
+import math
+from .market_proxy import MatrixMarketClient, MatrixMarketHeatmapClient
+from .quote_hub import quote_hub
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -204,6 +207,163 @@ async def _safe_send(ws: WebSocket, obj) -> bool:
     except Exception:
         log.exception("send_json failed")
         return False
+
+
+HEATMAP_SYMBOLS = tuple(settings.HEATMAP_SYMBOLS)
+HEATMAP_SYMBOL_SET = {s.upper() for s in HEATMAP_SYMBOLS}
+_HEATMAP_BATCH_SIZE = 20
+_heatmap_clients: Set[WebSocket] = set()
+_heatmap_clients_lock = asyncio.Lock()
+_heatmap_task_lock = asyncio.Lock()
+_heatmap_dirty = asyncio.Event()
+_heatmap_stream_task: Optional[asyncio.Task] = None
+_heatmap_broadcast_task: Optional[asyncio.Task] = None
+
+if len(HEATMAP_SYMBOLS) != 60:
+    log.warning("[HEATMAP]: expected 60 symbols, got %d", len(HEATMAP_SYMBOLS))
+
+
+def _extract_symbol_from_topic(topic: str) -> Optional[str]:
+    if not topic:
+        return None
+    try:
+        tail = topic.split("/", 2)[-1]
+    except Exception:
+        return None
+    if "@" in tail:
+        tail = tail.split("@", 1)[0]
+    sym = tail.strip().upper()
+    return sym or None
+
+
+def _build_heatmap_batches(quotes: List[Dict[str, Any]], ts_ms: int):
+    if not quotes:
+        return
+    batch_size = _HEATMAP_BATCH_SIZE
+    total = max(1, math.ceil(len(quotes) / batch_size))
+    for idx in range(total):
+        sl = quotes[idx * batch_size : (idx + 1) * batch_size]
+        yield {
+            "type": "batch",
+            "index": idx,
+            "total": total,
+            "ts": ts_ms,
+            "quotes": sl,
+        }
+
+
+async def _heatmap_collect_quotes() -> List[Dict[str, Any]]:
+    snap = await quote_hub.snapshot()
+    out: List[Dict[str, Any]] = []
+    for sym in HEATMAP_SYMBOLS:
+        q = snap.get(sym)
+        if not q:
+            continue
+        out.append(
+            {
+                "symbol": sym,
+                "last": q.get("last"),
+                "prev_close": q.get("prev_close"),
+                "change_pct": q.get("change_pct"),
+                "updated_at": q.get("updated_at"),
+            }
+        )
+    return out
+
+
+async def _broadcast_heatmap_message(message: Dict[str, Any]) -> None:
+    async with _heatmap_clients_lock:
+        targets = list(_heatmap_clients)
+    if not targets:
+        return
+    stale: List[WebSocket] = []
+    for ws in targets:
+        try:
+            await ws.send_json(message)
+        except WebSocketDisconnect:
+            stale.append(ws)
+        except RuntimeError:
+            stale.append(ws)
+        except Exception:
+            log.exception("[HEATMAP]: send_json failed")
+            stale.append(ws)
+    if stale:
+        async with _heatmap_clients_lock:
+            for ws in stale:
+                _heatmap_clients.discard(ws)
+
+
+@app.get("/webapp/heatmap", response_class=HTMLResponse)
+def heatmap_webapp(request: Request, symbol: str = "ASELS"):
+    sym = (symbol or "ASELS").upper()
+    return templates.TemplateResponse(
+        "heatmap.html",
+        {
+            "request": request,
+            "symbol": sym,
+            "websocket_url": "/ws/heatmap",
+        },
+    )
+
+
+async def _heatmap_broadcast_loop():
+    try:
+        while True:
+            await _heatmap_dirty.wait()
+            _heatmap_dirty.clear()
+            await asyncio.sleep(0.2)
+            quotes = await _heatmap_collect_quotes()
+            if not quotes:
+                continue
+            ts_ms = int(time.time() * 1000)
+            for payload in _build_heatmap_batches(quotes, ts_ms):
+                await _broadcast_heatmap_message(payload)
+    except asyncio.CancelledError:
+        pass
+
+
+async def _heatmap_stream_loop():
+    if not HEATMAP_SYMBOLS:
+        log.warning("[HEATMAP]: no symbols configured; stream loop exiting")
+        return
+    client = MatrixMarketHeatmapClient(symbols=HEATMAP_SYMBOLS)
+    try:
+        async for topic, payload in client.connect_and_stream():
+            sym = _extract_symbol_from_topic(topic)
+            if not sym or sym not in HEATMAP_SYMBOL_SET:
+                continue
+            decoded = _decode_market_payload(payload)
+            if not decoded:
+                continue
+            record = {
+                "symbol": sym,
+                "last": decoded.get("last"),
+                "prev_close": decoded.get("prev_close"),
+                "change_pct": decoded.get("change_pct"),
+                "updated_at": int(time.time() * 1000),
+            }
+            await quote_hub.set(sym, record)
+            _heatmap_dirty.set()
+    except asyncio.CancelledError:
+        raise
+
+
+async def _ensure_heatmap_tasks() -> None:
+    global _heatmap_stream_task, _heatmap_broadcast_task
+    async with _heatmap_task_lock:
+        if _heatmap_stream_task is None or _heatmap_stream_task.done():
+            _heatmap_stream_task = asyncio.create_task(_heatmap_stream_loop())
+        if _heatmap_broadcast_task is None or _heatmap_broadcast_task.done():
+            _heatmap_broadcast_task = asyncio.create_task(_heatmap_broadcast_loop())
+
+
+async def _heatmap_send_snapshot(ws: WebSocket) -> None:
+    quotes = await _heatmap_collect_quotes()
+    if not quotes:
+        return
+    ts_ms = int(time.time() * 1000)
+    for payload in _build_heatmap_batches(quotes, ts_ms):
+        await ws.send_json(payload)
 
 
 # ---- minimal protobuf-like decoder for Trade ----
@@ -965,6 +1125,49 @@ async def logo(symbol: str):
 
     log.warning("logo upstream %s for %s; body=%r", r.status_code, sym, r.text[:200])
     return Response(status_code=HTTP_204_NO_CONTENT)
+
+
+@app.websocket("/ws/heatmap")
+async def ws_heatmap(ws: WebSocket):
+    await ws.accept()
+    cid = f"HEATMAP#{id(ws) & 0xFFFFFF:x}"
+    log.info("[%s]: client connected (HEATMAP)", cid)
+
+    async with _heatmap_clients_lock:
+        _heatmap_clients.add(ws)
+
+    try:
+        await _ensure_heatmap_tasks()
+        try:
+            await ws.send_json({"type": "meta", "symbols": list(HEATMAP_SYMBOLS)})
+        except WebSocketDisconnect:
+            return
+        except Exception:
+            log.exception("[%s]: failed to send heatmap meta", cid)
+        else:
+            try:
+                await _heatmap_send_snapshot(ws)
+            except WebSocketDisconnect:
+                return
+            except Exception:
+                log.exception("[%s]: failed to send initial heatmap snapshot", cid)
+
+        while True:
+            try:
+                msg = await ws.receive()
+            except WebSocketDisconnect:
+                break
+            except Exception:
+                log.exception("[%s]: heatmap receive error", cid)
+                break
+            if not msg:
+                continue
+            if msg.get("type") == "websocket.disconnect":
+                break
+    finally:
+        async with _heatmap_clients_lock:
+            _heatmap_clients.discard(ws)
+        log.info("[%s]: client disconnected (HEATMAP)", cid)
 
 
 @app.websocket("/ws/market/{symbol}")

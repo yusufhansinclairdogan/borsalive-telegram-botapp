@@ -520,7 +520,7 @@
 
         [data-theme="light"] .buy th,
         .buy td {
-            color: #00ff2a
+            color: #00ff2ac7
         }
 
         .sell th,
@@ -530,7 +530,7 @@
 
         [data-theme="light"] .sell th,
         .sell td {
-            color: rgb(255, 0, 34)
+            color: rgba(255, 0, 34, 0.836)
         }
 
         /* Pagination - sticky above bottom bar */
@@ -636,6 +636,7 @@
                 <a class="menu-item" id="go-depth">📊 <span>Derinlik</span></a>
                 <a class="menu-item" id="go-akd">🧩 <span>Aracı Kurum Dağılımı</span></a>
                 <a class="menu-item" id="go-takas">📑 <span>Takas</span></a>
+                <a class="menu-item" id="go-heatmap">🔥 <span>Isı Haritası</span></a>
                 <button class="menu-item" id="themeSwitch">🌓 <span>Koyu/Açık Tema</span></button>
             </div>
             <div class="menu-footer">Borsa Live — App By Yusufhan Doğan © 2025</div>
@@ -775,6 +776,7 @@
         qs("#go-depth").onclick = () => location.href = `${state.webBase}/webapp/depth?symbol=ASELS`;
         qs("#go-akd").onclick = () => location.href = `${state.webBase}/webapp/akd?symbol=ASELS`;
         qs("#go-takas").onclick = closeDrawer;
+        qs("#go-heatmap").onclick = () => location.href = `${state.webBase}/webapp/heatmap?symbol=ASELS`;
 
         /* ===== Table sorting ===== */
         qsa("#tbl thead th").forEach(th => {

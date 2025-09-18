@@ -724,6 +724,8 @@
                 <a class="menu-item" id="go-depth">📊 <span>Derinlik</span></a>
                 <a class="menu-item" id="go-akd">🧩 <span>Aracı Kurum Dağılımı</span></a>
                 <a class="menu-item" id="go-takas">📑 <span>Takas</span></a>
+                <a class="menu-item" id="go-heatmap">🔥 <span>Isı Haritası</span></a>
+
                 <button class="menu-item themebtn" id="themeSwitch">🌓 <span>Koyu/Açık Tema</span></button>
             </div>
             <div class="menu-footer">Borsa Live — App By Yusufhan Doğan © 2025</div>
@@ -882,6 +884,7 @@
         qs("#themeSwitch").onclick = () => { state.theme = (state.theme === "dark" ? "light" : "dark"); document.documentElement.setAttribute("data-theme", state.theme); localStorage.setItem("akd-theme", state.theme); };
         qs("#go-depth").onclick = () => location.href = `${state.webBase}/webapp/depth?symbol=${encodeURIComponent(state.symbol)}`;
         qs("#go-akd").onclick = () => location.href = `${state.webBase}/webapp/akd?symbol=${encodeURIComponent(state.symbol)}`;
+        qs("#go-heatmap").onclick = () => location.href = `${state.webBase}/webapp/heatmap?symbol=${encodeURIComponent(state.symbol)}`;
         qs("#go-takas").onclick = closeDrawer;
 
         /* ===== Sticky hint remove when scrolled ===== */

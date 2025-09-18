@@ -24,10 +24,82 @@ class Settings:
     MATRIX_LOGIN_PASS = os.getenv("MATRIX_LOGIN_PASS", "")
     PLAYWRIGHT_HEADLESS = os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() != "false"
     JWT_REFRESH_INTERVAL_SEC = int(os.getenv("JWT_REFRESH_INTERVAL_SEC", "260"))
-    MARKET_CONNECT_TEMPLATE_B64 = os.getenv("MARKET_CONNECT_TEMPLATE_B64","")
-    TRADE_CONNECT_TEMPLATE_B64 = os.getenv("TRADE_CONNECT_TEMPLATE_B64","")
+    MARKET_CONNECT_TEMPLATE_B64 = os.getenv("MARKET_CONNECT_TEMPLATE_B64", "")
+    TRADE_CONNECT_TEMPLATE_B64 = os.getenv("TRADE_CONNECT_TEMPLATE_B64", "")
+    _HM_DEFAULT = (
+        "ASTOR",
+        "AKBNK",
+        "ASELS",
+        "BIMAS",
+        "GARAN",
+        "THYAO",
+        "FROTO",
+        "KCHOL",
+        "TUPRS",
+        "YKBNK",
+        "SASA",
+        "HEKTS",
+        "KONTR",
+        "PGSUS",
+        "EREGL",
+        "KRDMD",
+        "BRSAN",
+        "ISMEN",
+        "BJKAS",
+        "TOASO",
+        "VESTL",
+        "TTRAK",
+        "SAHOL",
+        "TAVHL",
+        "SISE",
+        "DOHOL",
+        "HALKB",
+        "ENJSA",
+        "ENKAI",
+        "EUPWR",
+        "ALARK",
+        "KARTN",
+        "GESAN",
+        "KORDS",
+        "ODAS",
+        "OYAKC",
+        "SMRTG",
+        "TMSN",
+        "TSKB",
+        "MGROS",
+        "ISCTR",
+        "VAKBN",
+        "PETKM",
+        "GOZDE",
+        "AGHOL",
+        "GUBRF",
+        "PENTA",
+        "MPARK",
+        "ALKIM",
+        "LOGO",
+        "SOKM",
+        "DOAS",
+        "AKSEN",
+        "TSPOR",
+        "KOZAL",
+        "KOZAA",
+        "IHLAS",
+        "EGSER",
+        "NTHOL",
+        "QUAGR",
+    )
+    HEATMAP_SYMBOLS = tuple(
+        s.strip().upper()
+        for s in (
+            os.getenv("HEATMAP_SYMBOLS", "").split(",")
+            if os.getenv("HEATMAP_SYMBOLS")
+            else _HM_DEFAULT
+        )
+        if s.strip()
+    )
+    del _HM_DEFAULT
     # Fallback frames (JSON string -> list)
-    
+
     try:
         DEPTH_SUB_FRAMES_ASTOR = json.loads(os.getenv("DEPTH_SUB_FRAMES_ASTOR", "[]"))
     except Exception:

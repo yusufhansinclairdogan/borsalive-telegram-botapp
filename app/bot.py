@@ -19,6 +19,7 @@ from .config import settings
 from .snapshot import render_depth_png
 from .depth_hub import hub as depth_hub
 from .trade_hub import trade_hub  # mevcutsa sorun olmaz
+
 # ----------------------------------------------------
 
 log = logging.getLogger("bot")
@@ -29,8 +30,11 @@ router = Router()
 
 # -------------------- Keyboards -------------------- #
 
+
 def depth_keyboard(symbol: str) -> InlineKeyboardMarkup:
     url = f"{settings.WEBAPP_BASE}/webapp/depth?symbol={symbol.upper()}"
+    heatmap_url = f"{settings.WEBAPP_BASE}/webapp/heatmap"
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -45,8 +49,15 @@ def depth_keyboard(symbol: str) -> InlineKeyboardMarkup:
                     callback_data=f"snap|{symbol.upper()}|mobile|2",
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    text="🔥 Sıcaklık Haritası",
+                    web_app=WebAppInfo(url=heatmap_url),
+                )
+            ],
         ]
     )
+
 
 def akd_keyboard(symbol: str) -> InlineKeyboardMarkup:
     url = f"{settings.WEBAPP_BASE}/webapp/akd?symbol={symbol.upper()}"
@@ -61,6 +72,7 @@ def akd_keyboard(symbol: str) -> InlineKeyboardMarkup:
         ]
     )
 
+
 def takas_keyboard(symbol: str) -> InlineKeyboardMarkup:
     url = f"{settings.WEBAPP_BASE}/webapp/takas?symbol={symbol.upper()}"
     return InlineKeyboardMarkup(
@@ -74,29 +86,53 @@ def takas_keyboard(symbol: str) -> InlineKeyboardMarkup:
         ]
     )
 
+
 def snapshot_keyboard(symbol: str) -> InlineKeyboardMarkup:
     sym = symbol.upper()
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="📱 Mobil", callback_data=f"snap|{sym}|mobile|2"),
-                InlineKeyboardButton(text="🖥️ Geniş", callback_data=f"snap|{sym}|wide|2"),
+                InlineKeyboardButton(
+                    text="📱 Mobil", callback_data=f"snap|{sym}|mobile|2"
+                ),
+                InlineKeyboardButton(
+                    text="🖥️ Geniş", callback_data=f"snap|{sym}|wide|2"
+                ),
             ],
             [
-                InlineKeyboardButton(text="🧪 Mobil (x3)", callback_data=f"snap|{sym}|mobile|3"),
+                InlineKeyboardButton(
+                    text="🧪 Mobil (x3)", callback_data=f"snap|{sym}|mobile|3"
+                ),
             ],
+        ]
+    )
+
+def heatmap_keyboard() -> InlineKeyboardMarkup:
+    url = f"{settings.WEBAPP_BASE}/webapp/heatmap"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔥 Sıcaklık Haritası (Mini App)",
+                    web_app=WebAppInfo(url=url),
+                )
+            ]
         ]
     )
 
 # -------------------- Utilities -------------------- #
 
+
 def _clean_symbol(txt: str) -> str:
     import re
+
     s = (txt or "").upper()
     s = re.sub(r"[^A-Z0-9]", "", s)
     return s
 
+
 # -------------------- Snapshot callback -------------------- #
+
 
 @dp.callback_query(F.data.startswith("snap|"))
 async def on_snap(cq: CallbackQuery):
@@ -106,7 +142,9 @@ async def on_snap(cq: CallbackQuery):
 
         # API üzerinden PNG (stateless, pratik)
         api = settings.API_BASE.rstrip("/")
-        url = f"{api}/api/snapshot/depth.png?symbol={sym}&size={size}&scale={int(scale)}"
+        url = (
+            f"{api}/api/snapshot/depth.png?symbol={sym}&size={size}&scale={int(scale)}"
+        )
         async with httpx.AsyncClient(timeout=20.0) as cli:
             r = await cli.get(url)
         if r.status_code != 200 or not r.content:
@@ -120,15 +158,20 @@ async def on_snap(cq: CallbackQuery):
         log.exception("snapshot error: %s", e)
         await cq.answer("Snapshot alınamadı, lütfen tekrar deneyin.", show_alert=True)
 
+
 # -------------------- Commands -------------------- #
+
 
 @dp.message(Command("start"))
 async def cmd_start(msg: Message):
     await msg.answer(
         "Merhaba! /derinlik <SEMBOL> ile canlı 10 kademe derinliği, "
         "/akd <SEMBOL> ile AKD’yi, /takas <SEMBOL> ile Takas ekranını açabilirsin.\n"
+        "/sicaklikharitasi ile Sıcaklık Haritasını, /akd <SEMBOL> ile AKD’yi, "
+        "/takas <SEMBOL> ile Takas ekranını açabilirsin.\n"
         "Örn: /derinlik ASTOR"
     )
+
 
 @dp.message(Command("snapshot"))
 async def cmd_snapshot(msg: Message):
@@ -141,6 +184,7 @@ async def cmd_snapshot(msg: Message):
         reply_markup=snapshot_keyboard(symbol),
     )
 
+
 @dp.message(Command("derinlik"))
 async def cmd_depth(msg: Message):
     parts = (msg.text or "").split()
@@ -151,6 +195,7 @@ async def cmd_depth(msg: Message):
         f"{symbol} CANLI Derinlik Mini Uygulamasını Açmak İçin Aşağıya Tıkla:",
         reply_markup=depth_keyboard(symbol),
     )
+
 
 @dp.message(Command("akd"))
 async def cmd_akd(msg: Message):
@@ -163,6 +208,7 @@ async def cmd_akd(msg: Message):
         reply_markup=akd_keyboard(symbol),
     )
 
+
 @dp.message(Command("takas"))
 async def cmd_takas(msg: Message):
     parts = (msg.text or "").split()
@@ -172,6 +218,13 @@ async def cmd_takas(msg: Message):
     await msg.answer(
         f"{symbol} Takas Mini Uygulamasını Aç:",
         reply_markup=takas_keyboard(symbol),
+    )
+
+@dp.message(Command(commands=("sicaklikharitasi", "heatmap")))
+async def cmd_heatmap(msg: Message):
+    await msg.answer(
+        "Genel Piyasa Sıcaklık Haritasını Aç:",
+        reply_markup=heatmap_keyboard(),
     )
 
 # “snapshot al” serbest metin:
@@ -203,7 +256,9 @@ async def cmd_snapshot_free(message: Message):
     except Exception:
         await message.answer("Snapshot sırasında bir hata oldu.")
 
+
 # -------------------- Webhook bridge -------------------- #
+
 
 def setup_webhook_app(app: FastAPI):
     @app.post(settings.WEBHOOK_RELATIVE_PATH)
@@ -213,12 +268,14 @@ def setup_webhook_app(app: FastAPI):
         await dp.feed_webhook_update(bot, update)
         return Response(status_code=200)
 
+
 async def on_startup():
     await bot.delete_webhook(drop_pending_updates=True)
     await bot.set_webhook(
         url=f"{settings.API_BASE}{settings.WEBHOOK_RELATIVE_PATH}",
         secret_token=settings.WEBHOOK_SECRET,
     )
+
 
 async def on_shutdown():
     await bot.session.close()
@@ -236,6 +293,7 @@ def pgc_keyboard():
             ]
         ]
     )
+
 
 @dp.message(Command("pgc"))
 async def cmd_pgc(msg: Message):

@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 import asyncio, base64, logging, random
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Iterable, Optional, Sequence, Tuple
+
 
 from websockets.client import connect
 from websockets.exceptions import ConnectionClosed
@@ -89,7 +90,13 @@ def _iter_publish_payloads(ws_frame: bytes):
         if j + tlen > len(packet):
             continue
         # topic = packet[j:j+tlen]  # gerekirse decode edebilirsin
+        topic_bytes = packet[j : j + tlen]
+
         j += tlen
+        try:
+            topic = topic_bytes.decode("utf-8")
+        except Exception:
+            topic = ""
 
         qos = (flags >> 1) & 0x03
         if qos:
@@ -99,14 +106,23 @@ def _iter_publish_payloads(ws_frame: bytes):
             j += 2
 
         payload = packet[j:]
-        yield payload
+        yield topic, payload
 
 
-def _build_sub_body(symbol: str, pid: int) -> bytes:
-    """MQTT SUBSCRIBE body: PID(2) + [len(2)+topic+qos]"""
-    topic = f"mx/symbol/{symbol}@lvl2".encode("ascii")
-    tb = len(topic).to_bytes(2, "big") + topic + b"\x00"  # qos=0
-    return pid.to_bytes(2, "big") + tb
+def _build_sub_body(symbols: Sequence[str] | str, pid: int) -> bytes:
+    """MQTT SUBSCRIBE body: PID(2) + [len(2)+topic+qos] per symbol."""
+    if isinstance(symbols, str):
+        sym_iter: Iterable[str] = (symbols,)
+    else:
+        sym_iter = symbols
+
+    body = bytearray(pid.to_bytes(2, "big"))
+    for sym in sym_iter:
+        topic = f"mx/symbol/{sym.upper()}@lvl2".encode("ascii")
+        body.extend(len(topic).to_bytes(2, "big"))
+        body.extend(topic)
+        body.append(0)
+    return bytes(body)
 
 
 class MatrixMarketClient:
@@ -172,7 +188,7 @@ class MatrixMarketClient:
                     if _looks_suback(fr):
                         log.info("MARKET: early SUBACK len=%d", len(fr))
                         continue
-                    for payload in _iter_publish_payloads(fr):
+                    for _topic, payload in _iter_publish_payloads(fr):
                         yield payload
             if not got_connack:
                 log.warning("MARKET: CONNACK alınamadı; devam.")
@@ -204,8 +220,138 @@ class MatrixMarketClient:
                     if _looks_suback(raw):
                         log.info("MARKET: SUBACK ok")
                         continue
-                    for payload in _iter_publish_payloads(raw):
+                    for _topic, payload in _iter_publish_payloads(raw):
                         yield payload
+            except ConnectionClosed:
+                pass
+            finally:
+                hb_task.cancel()
+
+
+class MatrixMarketHeatmapClient:
+    """Single connection + multi-subscribe client for heatmap streaming."""
+
+    def __init__(
+        self, symbols: Sequence[str], connect_template_b64: Optional[str] = None
+    ):
+        if not symbols:
+            raise ValueError("Heatmap client requires at least one symbol")
+
+        self.symbols = [s.upper() for s in symbols]
+        self.url = "wss://rtstream.radix.matriksdata.com/market"
+        self.origin = settings.MATRIX_ORIGIN
+        self.subprotocol = settings.MATRIX_SUBPROTOCOL
+
+        tmpl_b64 = (
+            connect_template_b64
+            or getattr(settings, "MARKET_CONNECT_TEMPLATE_B64", "")
+            or settings.CONNECT_TEMPLATE_B64
+        )
+        if not tmpl_b64:
+            raise RuntimeError(
+                "Market CONNECT template (MARKET_CONNECT_TEMPLATE_B64/CONNECT_TEMPLATE_B64) yok."
+            )
+        self.connect_template = base64.b64decode(tmpl_b64)
+
+    async def connect_and_stream(self) -> AsyncIterator[Tuple[str, bytes]]:
+        backoff = 1.0
+        while True:
+            try:
+                async for topic, payload in self._connect_once():
+                    yield topic, payload
+                backoff = 1.0
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("HEATMAP: stream error; reconnecting")
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 1.7, 15.0)
+
+    async def _connect_once(self) -> AsyncIterator[Tuple[str, bytes]]:
+        headers = {
+            "Origin": self.origin,
+            "Pragma": "no-cache",
+            "Cache-Control": "no-cache",
+            "User-Agent": "Mozilla/5.0",
+        }
+        subprotocols = [self.subprotocol] if self.subprotocol else None
+
+        async with connect(
+            self.url,
+            extra_headers=headers,
+            subprotocols=subprotocols,
+            ping_interval=25,
+            ping_timeout=15,
+            close_timeout=10,
+            max_queue=None,
+        ) as ws:
+            log.info(
+                "HEATMAP: connected to MATRİKS MARKET WS (%d symbols)",
+                len(self.symbols),
+            )
+
+            await _send(ws, b"\x10", "EA== preamble (heatmap)")
+            await asyncio.sleep(0.02)
+
+            jwt = token_manager.get()
+            if not jwt:
+                raise RuntimeError("JWT yok/expired. /admin/jwt ile güncelle.")
+            connect_packet = replace_jwt_in_connect(self.connect_template, jwt.encode())
+            await _send(ws, connect_packet, "CONNECT (heatmap)")
+
+            got_connack = False
+            for _ in range(20):
+                try:
+                    fr = await asyncio.wait_for(ws.recv(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    continue
+                if isinstance(fr, (bytes, bytearray)):
+                    if _looks_connack(fr):
+                        log.info("HEATMAP: CONNACK ok")
+                        got_connack = True
+                        break
+                    if _looks_suback(fr):
+                        log.info("HEATMAP: early SUBACK len=%d", len(fr))
+                        continue
+                    for topic, payload in _iter_publish_payloads(fr):
+                        yield topic, payload
+            if not got_connack:
+                log.warning("HEATMAP: CONNACK alınamadı; devam.")
+
+            await _send(ws, b"\x82", "SUBSCRIBE header (heatmap)")
+            pid = random.randint(0x2000, 0x7FFF)
+            body = _build_sub_body(self.symbols, pid)
+            rl = _enc_vlq(len(body))
+            await _send(ws, rl + body, "SUBSCRIBE body (heatmap)")
+
+            heartbeat = base64.b64decode("wAA=")
+
+            async def _hb():
+                while True:
+                    try:
+                        await _send(ws, heartbeat, "heartbeat (heatmap)")
+                    except Exception:
+                        break
+                    await asyncio.sleep(55)
+
+            hb_task = asyncio.create_task(_hb())
+
+            try:
+                while True:
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=65.0)
+                    except asyncio.TimeoutError:
+                        log.warning("HEATMAP: upstream stalled; reconnecting")
+                        return
+                    if not isinstance(raw, (bytes, bytearray)):
+                        continue
+                    if _looks_suback(raw):
+                        log.info("HEATMAP: SUBACK ok")
+                        continue
+                    for topic, payload in _iter_publish_payloads(raw):
+                        if not topic:
+                            continue
+                        yield topic, payload
             except ConnectionClosed:
                 pass
             finally:

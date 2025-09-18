@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package depthfeed;
+
+// Tek bir seviye (order book level)
+message OrderLevel {
+  // Fiyat (IEEE-754 double, wire: fixed64)
+  double price   = 1;
+
+  // Miktar (adet, lot vb. – wire: varint)
+  uint64 qty     = 2;
+
+  // Zaman damgası (epoch ms/ns – sağlayıcıya göre; wire: varint)
+  uint64 ts      = 3;
+
+  // O fiyattaki emir adedi (wire: varint)
+  uint32 orders  = 4;
+}
+
+// Derinlik snapshot’ı
+message DepthSnapshot {
+  // Enstrüman sembolü (örn. "ASTOR", "VANGD", "SIS E", "ASTELS" vb.)
+  string symbol        = 1;
+
+  // Oturum/etiket (örn. "20250808_SYMBOL")
+  string session_tag   = 2;
+
+  // Snapshot zaman damgası (epoch ms/ns – wire: varint)
+  uint64 snapshot_ts   = 3;
+
+  // Satış tarafı seviyeleri (asks)
+  repeated OrderLevel asks = 4;
+
+  // Alış tarafı seviyeleri (bids)
+  repeated OrderLevel bids = 5;
+
+  // (Opsiyonel) sağlayıcıya özgü bayrak/alanlar ileride eklenebilir:
+  // uint32 flag1 = 6;
+  // uint32 flag2 = 7;
+  // uint32 flag3 = 8;
+}

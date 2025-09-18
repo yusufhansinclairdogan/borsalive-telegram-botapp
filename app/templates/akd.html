@@ -712,6 +712,7 @@
       <div class="menu-items">
         <a class="menu-item" id="go-depth">📊 <span>Derinlik</span></a>
         <a class="menu-item" id="go-akd">🧩 <span>Aracı Kurum Dağılımı</span></a>
+        <a class="menu-item" id="go-heatmap">🔥 <span>Isı Haritası</span></a>
         <div class="menu-toggle">
           <div>🌗 Tema</div>
           <div id="themeSwitch" class="switch" title="Koyu/Açık"></div>
@@ -914,6 +915,7 @@ qs("#chipMenu") && (qs("#chipMenu").onclick = openDrawer);
 drawer && drawer.addEventListener("click",(e)=>{ if(e.target.matches("[data-close]")) closeDrawer(); });
 
 qs("#go-depth") && (qs("#go-depth").onclick = ()=> location.href = `${state.webBase}/webapp/depth?symbol=${encodeURIComponent(state.symbol)}`);
+qs("#go-heatmap") && (qs("#go-heatmap").onclick = ()=> location.href = `${state.webBase}/webapp/heatmap?symbol=${encodeURIComponent(state.symbol)}`);
 qs("#go-akd")   && (qs("#go-akd").onclick   = closeDrawer);
 
 // Theme toggle in menu
@@ -1312,7 +1314,5 @@ window.addEventListener("load", ()=>{
   loadAll();
 });
 </script>
-
 </body>
-
 </html>

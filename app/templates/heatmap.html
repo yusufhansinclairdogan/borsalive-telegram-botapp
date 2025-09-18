@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="tr" class="">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Isı Haritası | Borsa Live</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="/static/heatmap.css"/>
+  <script>
+    window.WS_PATH = "{{ websocket_url }}";
+    window.FALLBACK_SYMBOL = "{{ symbol }}";
+    try {
+      if (localStorage.getItem("theme") === "dark") {
+        document.documentElement.classList.add("dark");
+      }
+    } catch (err) {}
+  </script>
+</head>
+<body>
+<div class="wrap">
+  <header class="header">
+    <div class="brand">
+      <img src="/static/borsalivelogo.jpg" alt="Borsa Live"/>
+      <div class="title">
+        <span class="sym">Borsa Live</span>
+        <span class="sub">Isı Haritası</span>
+      </div>
+    </div>
+    <div class="controls">
+      <div id="liveBadge" class="badge"><span class="dot"></span><span>CANLI</span></div>
+      <button id="themeToggle" class="theme-switch" type="button" aria-label="Tema">
+        <span class="knob"></span>
+        <svg class="moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path>
+        </svg>
+        <svg class="sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M12 4V2m0 20v-2M4.93 4.93L3.51 3.51m16.98 16.98l-1.42-1.42M4 12H2m20 0h-2M4.93 19.07l-1.42 1.42m16.98-16.98l-1.42 1.42M12 8a4 4 0 100 8 4 4 0 000-8z"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="status-row">
+    <div id="status">Bağlanıyor…</div>
+    <div id="lastUpdate">Son Güncelleme: —</div>
+  </section>
+
+  <section class="heatmap-section">
+    <div id="heatmapEmpty" class="heatmap-empty blink">Veriler yükleniyor…</div>
+    <div id="heatmapGrid" class="heatmap-grid" role="grid" aria-label="Isı haritası"></div>
+  </section>
+
+  <aside id="infoPanel" class="info-panel" aria-live="polite">
+    <div class="info-head">
+      <div>
+        <div class="info-title">Isı Haritası</div>
+        <div class="info-sub">60 seçili hisse senedi için canlı son fiyat &amp; değişim</div>
+      </div>
+      <button id="infoClose" type="button" aria-label="Kapat">&times;</button>
+    </div>
+    <div class="info-body">
+      <p>Isı haritasındaki kutucuklar hisse sembolü, son fiyat ve yüzde değişimi gösterir. Renk yeşile döndükçe yükseliş, kırmızıya döndükçe düşüş artar.</p>
+      <p>Bir kutucuğa dokunarak ilgili hissenin derinlik ekranına hızlıca geçebilirsiniz.</p>
+      <ul>
+        <li>Canlı veri geldiğinde CANLI rozetinin noktası yanıp söner.</li>
+        <li>Harita otomatik olarak her güncellemede yenilenir.</li>
+        <li>Menüden diğer mini uygulamalara geçiş yapabilirsiniz.</li>
+      </ul>
+    </div>
+  </aside>
+
+  <footer class="footer">Borsa Live • hızlı piyasa araçları &mdash; 2025</footer>
+</div>
+
+<div id="drawer" class="drawer" aria-hidden="true">
+  <div class="drawer-header">
+    <img src="/static/logo.svg" alt="Borsa Live" class="drawer-logo"/>
+    <button id="drawerClose" aria-label="Kapat">&times;</button>
+  </div>
+  <nav class="drawer-nav">
+    <a id="drawerDepth" class="drawer-item" href="/webapp/depth?symbol={{ symbol }}">
+      <span class="icon">📊</span>
+      <span>Derinlik</span>
+    </a>
+    <a id="drawerAkd" class="drawer-item" href="/webapp/akd?symbol={{ symbol }}">
+      <span class="icon">🏦</span>
+      <span>AKD (Aracı Kurum)</span>
+    </a>
+    <a class="drawer-item active" href="/webapp/heatmap?symbol={{ symbol }}">
+      <span class="icon">🔥</span>
+      <span>Isı Haritası</span>
+    </a>
+  </nav>
+  <div class="drawer-footer">
+    <div>Borsa Live</div>
+    <div>App By Yusufhan Doğan</div>
+    <div>2025</div>
+  </div>
+</div>
+<div id="backdrop" class="backdrop"></div>
+
+<div id="bottombar" class="bottombar">
+  <button id="btnMenu" class="bb-item" type="button" aria-label="Menü">
+    <span class="bb-ico">☰</span>
+    <span class="bb-txt">Menü</span>
+  </button>
+  <a id="navDepth" href="/webapp/depth?symbol={{ symbol }}" class="bb-item" aria-label="Derinlik">
+    <span class="bb-ico">📊</span>
+    <span class="bb-txt">Derinlik</span>
+  </a>
+  <a id="navAkd" href="/webapp/akd?symbol={{ symbol }}" class="bb-item" aria-label="AKD">
+    <span class="bb-ico">🏦</span>
+    <span class="bb-txt">AKD</span>
+  </a>
+  <a href="/webapp/heatmap?symbol={{ symbol }}" class="bb-item active" aria-label="Isı Haritası">
+    <span class="bb-ico">🔥</span>
+    <span class="bb-txt">Isı Haritası</span>
+  </a>
+  <button id="btnInfo" class="bb-item" type="button" aria-label="Bilgi">
+    <span class="bb-ico">ℹ️</span>
+    <span class="bb-txt">Bilgi</span>
+  </button>
+</div>
+
+<script src="/static/heatmap.js" defer></script>
+</body>
+</html>
