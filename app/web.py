@@ -1281,6 +1281,48 @@ async def api_news(
 
     cleaned_filters = _cleanup_filters(raw_filters)
     filter_signature = cleaned_filters if cleaned_filters else {}
+
+    def _pick_symbol(*candidates: Any) -> Optional[str]:
+        for cand in candidates:
+            if cand is None:
+                continue
+            if isinstance(cand, (list, tuple, set)):
+                for item in cand:
+                    picked = _pick_symbol(item)
+                    if picked:
+                        return picked
+                continue
+            try:
+                text = str(cand)
+            except Exception:
+                continue
+            text = text.strip()
+            if not text:
+                continue
+            if "," in text:
+                text = text.split(",", 1)[0].strip()
+            if not text:
+                continue
+            return text.upper()
+        return None
+
+    symbol_value = _pick_symbol(
+        filter_signature.get("symbol") if filter_signature else None,
+        filter_signature.get("symbols") if filter_signature else None,
+        filter_signature.get("code") if filter_signature else None,
+        filter_signature.get("codes") if filter_signature else None,
+        filter_signature.get("ticker") if filter_signature else None,
+        raw_filters.get("symbol"),
+        raw_filters.get("symbols"),
+        raw_filters.get("code"),
+        raw_filters.get("codes"),
+        raw_filters.get("ticker"),
+        request.query_params.get("symbol"),
+    )
+
+    if not symbol_value:
+        log.error("news: symbol missing in request")
+        return JSONResponse({"error": "symbol_required"}, status_code=400)
     content_value = (content or "ALL").strip() or "ALL"
 
     cache_key = _news_cache_key(content_value, filter_signature)
@@ -1318,19 +1360,20 @@ async def api_news(
     try:
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as cli:
             if not qid_value:
-                search_body: Dict[str, Any] = {
-                    "content": content_value,
-                    "page": 1,
-                    "size": size,
-                }
-                if filter_signature:
-                    search_body["filter"] = filter_signature
+                search_params: Dict[str, Any] = dict(base_params)
+                search_params.update(
+                    {
+                        "language": "tr",
+                        "withComment": "true",
+                        "count": str(size),
+                        "query": f"symbol:{symbol_value}",
+                    }
+                )
                 try:
                     resp_search = await cli.post(
                         "https://api.matriksdata.com/dumrul/v2/news/search",
                         headers=headers,
-                        params=base_params,
-                        json=search_body,
+                        params=search_params,
                     )
                 except httpx.TimeoutException:
                     return JSONResponse(
