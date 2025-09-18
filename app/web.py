@@ -335,14 +335,55 @@ async def _heatmap_stream_loop():
             decoded = _decode_market_payload(payload)
             if not decoded:
                 continue
-            record = {
-                "symbol": sym,
-                "last": decoded.get("last"),
-                "prev_close": decoded.get("prev_close"),
-                "change_pct": decoded.get("change_pct"),
-                "updated_at": int(time.time() * 1000),
-            }
-            await quote_hub.set(sym, record)
+            existing = await quote_hub.get(sym) or {}
+            merged = dict(existing)
+            merged["symbol"] = sym
+
+            last_old = existing.get("last") if existing else None
+            prev_old = existing.get("prev_close") if existing else None
+            prev_change_pct = existing.get("change_pct") if existing else None
+
+            last_val = decoded.get("last")
+            last_changed = False
+            if last_val is not None:
+                last_changed = last_val != last_old
+                merged["last"] = last_val
+
+            prev_val = decoded.get("prev_close")
+            prev_changed = False
+            if prev_val is not None:
+                prev_changed = prev_val != prev_old
+                merged["prev_close"] = prev_val
+
+            for key, value in decoded.items():
+                if key in {"last", "prev_close", "change_pct"}:
+                    continue
+                if value is not None:
+                    merged[key] = value
+
+            merged_last = merged.get("last")
+            merged_prev = merged.get("prev_close")
+
+            if last_changed or prev_changed:
+                if merged_last is not None and merged_prev not in (None, 0):
+                    merged["change_pct"] = (merged_last - merged_prev) / merged_prev * 100.0
+                else:
+                    if prev_change_pct is not None:
+                        merged["change_pct"] = prev_change_pct
+                    else:
+                        merged.pop("change_pct", None)
+            else:
+                new_change = decoded.get("change_pct")
+                if new_change is not None:
+                    merged["change_pct"] = new_change
+                elif prev_change_pct is not None:
+                    merged["change_pct"] = prev_change_pct
+                else:
+                    merged.pop("change_pct", None)
+
+            merged["updated_at"] = int(time.time() * 1000)
+
+            await quote_hub.set(sym, merged)
             _heatmap_dirty.set()
     except asyncio.CancelledError:
         raise
