@@ -1453,7 +1453,7 @@ async def api_news(
             page_params.update(
                 {
                     "qid": qid_value,
-                    "page": page,
+                    "page": max(page - 1, 0),
                     "size": size,
                     "content": content_value,
                     "filter": json.dumps(filter_signature or {}, ensure_ascii=False),
@@ -1531,6 +1531,8 @@ async def api_news(
         meta_section,
         page_payload,
     )
+    if page_index is not None:
+        page_index += 1
     size_value = _first_numeric(
         [
             "size",
