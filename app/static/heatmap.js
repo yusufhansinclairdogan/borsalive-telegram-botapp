@@ -156,12 +156,15 @@
     tile.addEventListener("click", () => {
       const sym = tile.dataset.symbol;
       if (!sym) return;
-      try {
-        window.Telegram?.WebApp?.openLink?.(`/webapp/depth?symbol=${encodeURIComponent(sym)}`);
-      } catch (err) { }
-      if (!window.Telegram?.WebApp) {
-        window.location.href = `/webapp/depth?symbol=${encodeURIComponent(sym)}`;
+      const target = `/webapp/depth?symbol=${encodeURIComponent(sym)}`;
+      if (window.Telegram?.WebApp) {
+        try {
+          window.location.href = target;
+          return;
+        } catch (err) { }
+
       }
+      window.location.href = target;
     });
 
     tiles.set(symbol, tile);
