@@ -87,6 +87,20 @@ def takas_keyboard(symbol: str) -> InlineKeyboardMarkup:
     )
 
 
+def news_keyboard(symbol: str) -> InlineKeyboardMarkup:
+    url = f"{settings.WEBAPP_BASE}/webapp/news?symbol={symbol.upper()}"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"🗞️ {symbol.upper()} Haberler (Mini App)",
+                    web_app=WebAppInfo(url=url),
+                )
+            ]
+        ]
+    )
+
+
 def snapshot_keyboard(symbol: str) -> InlineKeyboardMarkup:
     sym = symbol.upper()
     return InlineKeyboardMarkup(
@@ -107,6 +121,7 @@ def snapshot_keyboard(symbol: str) -> InlineKeyboardMarkup:
         ]
     )
 
+
 def heatmap_keyboard() -> InlineKeyboardMarkup:
     url = f"{settings.WEBAPP_BASE}/webapp/heatmap"
     return InlineKeyboardMarkup(
@@ -119,6 +134,7 @@ def heatmap_keyboard() -> InlineKeyboardMarkup:
             ]
         ]
     )
+
 
 # -------------------- Utilities -------------------- #
 
@@ -168,8 +184,10 @@ async def cmd_start(msg: Message):
         "Merhaba! /derinlik <SEMBOL> ile canlı 10 kademe derinliği, "
         "/akd <SEMBOL> ile AKD’yi, /takas <SEMBOL> ile Takas ekranını açabilirsin.\n"
         "/sicaklikharitasi ile Sıcaklık Haritasını, /akd <SEMBOL> ile AKD’yi, "
+        "/haberler <SEMBOL> ile sembole özel haberleri, /akd <SEMBOL> ile AKD’yi, "
         "/takas <SEMBOL> ile Takas ekranını açabilirsin.\n"
-        "Örn: /derinlik ASTOR"
+        "/sicaklikharitasi ile Sıcaklık Haritasını açabilirsin.\n"
+        "Örn: /derinlik ASTOR, /haberler ASTOR"
     )
 
 
@@ -220,12 +238,27 @@ async def cmd_takas(msg: Message):
         reply_markup=takas_keyboard(symbol),
     )
 
+@dp.message(Command("haberler"))
+async def cmd_haberler(msg: Message):
+    parts = (msg.text or "").split()
+    if len(parts) < 2:
+        return await msg.reply("Kullanım: /haberler <SEMBOL>\nÖrn: /haberler ASTOR")
+    symbol = _clean_symbol(parts[1])
+    if not symbol:
+        return await msg.reply("Lütfen geçerli bir sembol belirt: /haberler ASTOR")
+    await msg.answer(
+        f"{symbol} Haberler Mini Uygulamasını Aç:",
+        reply_markup=news_keyboard(symbol),
+    )
+
+
 @dp.message(Command(commands=("sicaklikharitasi", "heatmap")))
 async def cmd_heatmap(msg: Message):
     await msg.answer(
         "Genel Piyasa Sıcaklık Haritasını Aç:",
         reply_markup=heatmap_keyboard(),
     )
+
 
 # “snapshot al” serbest metin:
 @router.message(F.text.regexp(r"(?i)\b(snapshot al|snap al|ss al)\b"))

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="tr" class="">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{{ symbol }} | Haberler</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="/static/news.css" />
+  <script>
+    window.SYMBOL = "{{ symbol }}";
+    window.SYMBOLS_API = "/api/sectoral-brief";
+    window.NEWS_API = "/api/news";
+    try {
+      if (localStorage.getItem("theme") === "dark") {
+        document.documentElement.classList.add("dark");
+      }
+    } catch (err) { }
+  </script>
+</head>
+
+<body>
+  <div class="wrap">
+    <header class="header">
+      <div class="brand">
+        <img src="/static/borsalivelogo.jpg" alt="Borsa Live" />
+        <div class="title">
+          <span class="sym">{{ symbol }}</span>
+          <span class="sub">Haber Akışı</span>
+        </div>
+      </div>
+      <div class="controls">
+        <div id="liveBadge" class="badge"><span class="dot"></span><span>CANLI</span></div>
+        <button id="themeToggle" class="theme-switch" type="button" aria-label="Tema">
+          <span class="knob"></span>
+          <svg class="moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path>
+          </svg>
+          <svg class="sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M12 4V2m0 20v-2M4.93 4.93L3.51 3.51m16.98 16.98l-1.42-1.42M4 12H2m20 0h-2M4.93 19.07l-1.42 1.42m16.98-16.98l-1.42 1.42M12 8a4 4 0 100 8 4 4 0 000-8z"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="status-row">
+      <div id="status">Haberler yükleniyor…</div>
+      <div class="search" id="searchWrap">
+        <svg class="search-ico" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path d="M10 3a7 7 0 015.292 11.708l4 4a1 1 0 01-1.414 1.414l-4-4A7 7 0 1110 3zm0 2a5 5 0 100 10 5 5 0 000-10z"></path>
+        </svg>
+        <input id="symbolInput" type="text" inputmode="latin" maxlength="12" placeholder="Sembol ara (örn: THYAO)" autocomplete="off" />
+        <button id="symbolClear" type="button" aria-label="Temizle" hidden>&times;</button>
+        <div id="symbolDropdown" class="autocomplete" hidden></div>
+      </div>
+      <div id="lastUpdate">Son güncelleme: —</div>
+    </div>
+
+    <section class="filters" aria-label="Filtreler">
+      <div class="filter-row">
+        <button id="kapToggle" class="chip" type="button" aria-pressed="false">KAP Odaklı</button>
+        <div class="chip-group" id="categoryChips" role="group" aria-label="Kategori">
+          <button class="chip active" data-cat="all" type="button">Tümü</button>
+          <button class="chip" data-cat="company" type="button">Şirket</button>
+          <button class="chip" data-cat="economy" type="button">Ekonomi</button>
+          <button class="chip" data-cat="global" type="button">Global</button>
+          <button class="chip" data-cat="analysis" type="button">Analiz</button>
+        </div>
+      </div>
+      <div class="filter-row secondary">
+        <div class="chip-group" id="sentimentChips" role="group" aria-label="Duygu">
+          <button class="chip active" data-sentiment="all" type="button">Tümü</button>
+          <button class="chip" data-sentiment="positive" type="button">Olumlu</button>
+          <button class="chip" data-sentiment="neutral" type="button">Nötr</button>
+          <button class="chip" data-sentiment="negative" type="button">Olumsuz</button>
+        </div>
+        <div class="chip-group" id="quickRanges" role="group" aria-label="Zaman">
+          <button class="chip active" data-range="today" type="button">Bugün</button>
+          <button class="chip" data-range="week" type="button">Son 7 gün</button>
+          <button class="chip" data-range="month" type="button">Son 30 gün</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="news-area" aria-live="polite">
+      <div id="newsEmpty" class="empty" hidden>Bu filtrelerle haber bulunamadı.</div>
+      <div id="newsLoading" class="loading">Yükleniyor…</div>
+      <div id="newsList" class="news-list" role="feed"></div>
+      <button id="loadMore" class="load-more" type="button" hidden>Daha fazla yükle</button>
+    </section>
+  </div>
+
+  <div id="drawer" class="drawer">
+    <div class="drawer-header">
+      <img src="/static/logo.svg" alt="BorsaLive" class="drawer-logo" />
+      <button id="drawerClose" aria-label="Kapat">&times;</button>
+    </div>
+
+    <nav class="drawer-nav">
+      <a class="drawer-item" data-symbol-link href="/webapp/depth?symbol={{ symbol }}">
+        <span class="icon">📊</span>
+        <span>Derinlik</span>
+      </a>
+      <a class="drawer-item" data-symbol-link href="/webapp/akd?symbol={{ symbol }}">
+        <span class="icon">🏦</span>
+        <span>AKD (Aracı Kurum)</span>
+      </a>
+      <a class="drawer-item" data-symbol-link href="/webapp/heatmap?symbol={{ symbol }}">
+        <span class="icon">🔥</span>
+        <span>Isı Haritası</span>
+      </a>
+      <a class="drawer-item active" data-symbol-link href="/webapp/news?symbol={{ symbol }}">
+        <span class="icon">📰</span>
+        <span>Haberler</span>
+      </a>
+    </nav>
+
+    <div class="drawer-footer">
+      <div>Borsa Live</div>
+      <div>App By Yusufhan Doğan</div>
+      <div>2025</div>
+    </div>
+  </div>
+
+  <div id="backdrop" class="backdrop"></div>
+
+  <div id="bottombar" class="bottombar">
+    <button id="btnMenu" class="bb-item" type="button" aria-label="Menü">
+      <span class="bb-ico">☰</span>
+      <span class="bb-txt">Menü</span>
+    </button>
+    <a data-symbol-link href="/webapp/depth?symbol={{ symbol }}" class="bb-item" aria-label="Derinlik">
+      <span class="bb-ico">📊</span>
+      <span class="bb-txt">Derinlik</span>
+    </a>
+    <a data-symbol-link href="/webapp/heatmap?symbol={{ symbol }}" class="bb-item" aria-label="Isı Haritası">
+      <span class="bb-ico">🔥</span>
+      <span class="bb-txt">Isı Haritası</span>
+    </a>
+    <a data-symbol-link href="/webapp/news?symbol={{ symbol }}" class="bb-item active" aria-label="Haberler">
+      <span class="bb-ico">📰</span>
+      <span class="bb-txt">Haberler</span>
+    </a>
+    <button id="btnInfo" class="bb-item" type="button" aria-label="Filtreler">
+      <span class="bb-ico">⚙️</span>
+      <span class="bb-txt">Filtreler</span>
+    </button>
+  </div>
+
+  <aside id="infoPanel" class="info-panel" hidden>
+    <div class="info-head">
+      <div>
+        <div class="info-title">Filtreler</div>
+        <div class="info-sub">Haber akışını daraltmak için hızlı seçenekler</div>
+      </div>
+      <button id="infoClose" type="button" aria-label="Kapat">&times;</button>
+    </div>
+    <div class="info-body">
+      <p>Hisse sembolünü aratarak veya listeden seçerek özel haberleri görebilirsiniz. KAP odaklı mod yalnızca Kamuyu Aydınlatma Platformu
+        duyurularını listeler.</p>
+      <p>Kategori ve duygu filtreleri haber kartlarını anında yeniler. "Daha fazla yükle" butonuyla geçmişe doğru ilerleyebilirsiniz.</p>
+    </div>
+  </aside>
+
+  <script src="/static/news.js" defer></script>
+</body>
+
+</html>

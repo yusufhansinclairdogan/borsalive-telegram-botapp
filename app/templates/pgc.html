@@ -629,7 +629,7 @@
         <div class="backdrop" data-close></div>
         <div class="panel">
             <div class="logo">
-                <img src="borsalive/app/static/borsalivelogo.jpg" alt="logo" />
+                <img src="/static/borsalivelogo.jpg" alt="bl">
                 <div style="font-weight:800">Borsa Live</div>
             </div>
             <div class="menu-items">
@@ -637,6 +637,7 @@
                 <a class="menu-item" id="go-akd">🧩 <span>Aracı Kurum Dağılımı</span></a>
                 <a class="menu-item" id="go-takas">📑 <span>Takas</span></a>
                 <a class="menu-item" id="go-heatmap">🔥 <span>Isı Haritası</span></a>
+                <a class="menu-item" id="go-news">📰 <span>Haberler</span></a>
                 <button class="menu-item" id="themeSwitch">🌓 <span>Koyu/Açık Tema</span></button>
             </div>
             <div class="menu-footer">Borsa Live — App By Yusufhan Doğan © 2025</div>
@@ -745,6 +746,7 @@
     <div class="bottom">
         <div class="chip" id="chipMenu">☰ Menü</div>
         <div class="chip primary" id="chipHome">Ana Sayfa</div>
+        <div class="chip" id="chipNews">📰 Haberler</div>
         <div class="chip" id="chipInfo">Bilgi</div>
     </div>
 
@@ -777,7 +779,7 @@
         qs("#go-akd").onclick = () => location.href = `${state.webBase}/webapp/akd?symbol=ASELS`;
         qs("#go-takas").onclick = closeDrawer;
         qs("#go-heatmap").onclick = () => location.href = `${state.webBase}/webapp/heatmap?symbol=ASELS`;
-
+        qs("#go-news").onclick = () => location.href = `${state.webBase}/webapp/news?symbol=ASELS`;
         /* ===== Table sorting ===== */
         qsa("#tbl thead th").forEach(th => {
             th.addEventListener("click", () => {
@@ -933,6 +935,7 @@
         }
 
         qs("#btnApply").onclick = () => { state.page = 1; loadAll(); };
+        qs("#chipNews").onclick = () => location.href = `${state.webBase}/webapp/news?symbol=ASELS`;
 
         /* ===== Init ===== */
         window.addEventListener("load", () => { loadAll(); });

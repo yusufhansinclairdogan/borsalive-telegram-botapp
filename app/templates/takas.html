@@ -725,6 +725,8 @@
                 <a class="menu-item" id="go-akd">🧩 <span>Aracı Kurum Dağılımı</span></a>
                 <a class="menu-item" id="go-takas">📑 <span>Takas</span></a>
                 <a class="menu-item" id="go-heatmap">🔥 <span>Isı Haritası</span></a>
+                <a class="menu-item" id="go-news">📰 <span>Haberler</span></a>
+
 
                 <button class="menu-item themebtn" id="themeSwitch">🌓 <span>Koyu/Açık Tema</span></button>
             </div>
@@ -828,6 +830,9 @@
         <a class="bitem" id="chipHome" href="/" aria-label="Ana sayfa">
             <div>🏠</div><small>Ana Sayfa</small>
         </a>
+        <a class="bitem" id="chipNews" role="button" aria-label="Haberler">
+            <div>📰</div><small>Haberler</small>
+        </a>
         <a class="bitem" id="chipInfo" role="button" aria-label="Bilgi">
             <div>ℹ️</div><small>Bilgi</small>
         </a>
@@ -886,6 +891,8 @@
         qs("#go-akd").onclick = () => location.href = `${state.webBase}/webapp/akd?symbol=${encodeURIComponent(state.symbol)}`;
         qs("#go-heatmap").onclick = () => location.href = `${state.webBase}/webapp/heatmap?symbol=${encodeURIComponent(state.symbol)}`;
         qs("#go-takas").onclick = closeDrawer;
+        qs("#go-news").onclick = () => location.href = `${state.webBase}/webapp/news?symbol=${encodeURIComponent(state.symbol)}`;
+
 
         /* ===== Sticky hint remove when scrolled ===== */
         const tScroll = qs("#tableScroll");
@@ -1101,6 +1108,8 @@
         });
         /* show info chip */
         qs("#chipInfo").onclick = () => showModal();
+        qs("#chipNews").onclick = () => location.href = `${state.webBase}/webapp/news?symbol=${encodeURIComponent(state.symbol)}`;
+
 
         /* ===== Init ===== */
         window.addEventListener("load", async () => {

@@ -9,6 +9,7 @@ from fastapi import (
     HTTPException,
     Query,
 )
+import gzip
 from typing import Optional, Dict, Any, List, Set
 import asyncio
 import base64
@@ -75,6 +76,173 @@ def _headers(jwt_token: str) -> dict:
         "Cache-Control": "no-cache",
         "Pragma": "no-cache",
     }
+
+
+_NEWS_QID_CACHE: Dict[str, Dict[str, Any]] = {}
+_NEWS_QID_TTL = 45.0
+
+
+def _normalize_jwt_header(raw: Optional[str]) -> Optional[str]:
+    if not raw:
+        return None
+    raw = raw.strip()
+    if not raw:
+        return None
+    low = raw.lower()
+    if low.startswith("bearer ") or low.startswith("jwt "):
+        return raw
+    return f"jwt {raw}"
+
+
+def _news_headers(auth_header: str) -> Dict[str, str]:
+    origin = settings.MATRIX_ORIGIN or "https://app.matrikswebtrader.com"
+    return {
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json; charset=utf-8",
+        "Authorization": auth_header,
+        "Origin": origin,
+        "Referer": "https://app.matrikswebtrader.com/",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    }
+
+
+def _merge_filter_value(target: Dict[str, Any], key: str, value: Any) -> None:
+    if value is None:
+        return
+    if isinstance(value, str) and not value.strip():
+        return
+    existing = target.get(key)
+    if existing is None:
+        target[key] = value
+    elif isinstance(existing, list):
+        if isinstance(value, list):
+            existing.extend(v for v in value if v not in existing)
+        else:
+            if value not in existing:
+                existing.append(value)
+    else:
+        if isinstance(value, list):
+            values = [existing]
+            values.extend(v for v in value if v not in values)
+            target[key] = values
+        elif value != existing:
+            target[key] = [existing, value]
+
+
+def _cleanup_filters(data: Dict[str, Any]) -> Dict[str, Any]:
+    cleaned: Dict[str, Any] = {}
+    for key, value in data.items():
+        if isinstance(value, list):
+            reduced = [v for v in value if v not in (None, "")]
+            if reduced:
+                cleaned[key] = reduced
+        elif value not in (None, ""):
+            cleaned[key] = value
+    return cleaned
+
+
+def _freeze_for_cache(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _freeze_for_cache(v) for k, v in sorted(value.items())}
+    if isinstance(value, list):
+        return [_freeze_for_cache(v) for v in value]
+    return value
+
+
+def _news_cache_key(content: str, filters_signature: Dict[str, Any]) -> str:
+    frozen = _freeze_for_cache(filters_signature)
+    return json.dumps(
+        {"content": content, "filters": frozen}, sort_keys=True, ensure_ascii=False
+    )
+
+
+def _parse_upstream_json(resp: httpx.Response) -> Any:
+    try:
+        return resp.json()
+    except json.JSONDecodeError:
+        try:
+            return json.loads(gzip.decompress(resp.content).decode("utf-8"))
+        except Exception:
+            raise
+
+
+def _extract_qid(payload: Any) -> Optional[str]:
+    if isinstance(payload, dict):
+        qid = payload.get("qid")
+        if isinstance(qid, str) and qid:
+            return qid
+        for key in ("data", "result", "response"):
+            sub = payload.get(key)
+            sub_qid = _extract_qid(sub)
+            if sub_qid:
+                return sub_qid
+    return None
+
+
+def _extract_filters(payload: Any) -> Optional[Dict[str, Any]]:
+    if isinstance(payload, dict):
+        for key in ("filter", "filters"):
+            val = payload.get(key)
+            if isinstance(val, dict):
+                return val
+        for key in ("data", "result", "response"):
+            sub = payload.get(key)
+            extracted = _extract_filters(sub)
+            if extracted:
+                return extracted
+    return None
+
+
+def _extract_items(payload: Any) -> List[Any]:
+    if isinstance(payload, dict):
+        items = payload.get("items")
+        if isinstance(items, list):
+            return items
+        for key in ("data", "result", "response"):
+            sub = payload.get(key)
+            nested = _extract_items(sub)
+            if nested:
+                return nested
+    return []
+
+
+def _extract_pagination_meta(payload: Any) -> Dict[str, Any]:
+    if isinstance(payload, dict):
+        for key in ("pagination", "page", "meta", "page_info"):
+            meta = payload.get(key)
+            if isinstance(meta, dict):
+                return meta
+        for key in ("data", "result", "response"):
+            sub = payload.get(key)
+            meta = _extract_pagination_meta(sub)
+            if meta:
+                return meta
+    return {}
+
+
+def _first_numeric(keys: List[str], *sources: Dict[str, Any]) -> Optional[int]:
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        for key in keys:
+            if key not in source:
+                continue
+            val = source.get(key)
+            if isinstance(val, (int, float)):
+                return int(val)
+            if isinstance(val, str):
+                txt = val.strip()
+                if not txt:
+                    continue
+                try:
+                    return int(float(txt))
+                except ValueError:
+                    continue
+    return None
 
 
 @router.get("/api/sectoral-brief")
@@ -293,6 +461,20 @@ async def _broadcast_heatmap_message(message: Dict[str, Any]) -> None:
                 _heatmap_clients.discard(ws)
 
 
+@app.get("/webapp/news", response_class=HTMLResponse)
+def news_webapp(request: Request, symbol: str = "ASELS"):
+    sym = (symbol or "ASELS").upper()
+    return templates.TemplateResponse(
+        "news.html",
+        {
+            "request": request,
+            "symbol": sym,
+            "api_base": settings.API_BASE.rstrip("/"),
+            "webapp_base": settings.WEBAPP_BASE.rstrip("/"),
+        },
+    )
+
+
 @app.get("/webapp/heatmap", response_class=HTMLResponse)
 def heatmap_webapp(request: Request, symbol: str = "ASELS"):
     sym = (symbol or "ASELS").upper()
@@ -366,7 +548,9 @@ async def _heatmap_stream_loop():
 
             if last_changed or prev_changed:
                 if merged_last is not None and merged_prev not in (None, 0):
-                    merged["change_pct"] = (merged_last - merged_prev) / merged_prev * 100.0
+                    merged["change_pct"] = (
+                        (merged_last - merged_prev) / merged_prev * 100.0
+                    )
                 else:
                     if prev_change_pct is not None:
                         merged["change_pct"] = prev_change_pct
@@ -1056,6 +1240,295 @@ def _auth_header_jwt() -> str:
     if low.startswith("bearer ") or low.startswith("jwt "):
         return tok
     return f"jwt {tok}"
+
+
+@app.get("/api/news")
+async def api_news(
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    page_size: Optional[int] = Query(None),
+    content: str = Query("ALL"),
+    filters: Optional[str] = Query(None),
+    mid: Optional[str] = Query(None),
+    qid: Optional[str] = Query(None),
+):
+    page = max(1, page)
+    if page_size is not None:
+        try:
+            size = int(page_size)
+        except (TypeError, ValueError):
+            pass
+    size = max(1, min(size, 100))
+
+    raw_filters: Dict[str, Any] = {}
+    if filters:
+        try:
+            parsed_filters = json.loads(filters)
+        except json.JSONDecodeError:
+            raw_filters["raw"] = filters
+        else:
+            if isinstance(parsed_filters, dict):
+                raw_filters.update(parsed_filters)
+            else:
+                raw_filters["raw"] = parsed_filters
+
+    reserved_keys = {"page", "size", "page_size", "content", "mid", "qid", "filters"}
+    for key, value in request.query_params.multi_items():
+        if key in reserved_keys:
+            continue
+        _merge_filter_value(raw_filters, key, value)
+
+    cleaned_filters = _cleanup_filters(raw_filters)
+    filter_signature = cleaned_filters if cleaned_filters else {}
+    content_value = (content or "ALL").strip() or "ALL"
+
+    cache_key = _news_cache_key(content_value, filter_signature)
+    now = time.time()
+    qid_value = qid.strip() if isinstance(qid, str) and qid.strip() else None
+    cache_hit = False
+    if not qid_value:
+        cached = _NEWS_QID_CACHE.get(cache_key)
+        if cached:
+            cached_ts = cached.get("ts", 0.0)
+            if now - cached_ts < _NEWS_QID_TTL:
+                candidate = cached.get("qid")
+                if isinstance(candidate, str) and candidate:
+                    qid_value = candidate
+                    cache_hit = True
+
+    jwt_raw = None
+    try:
+        jwt_raw = token_manager.get()
+    except Exception:
+        log.exception("news: token_manager.get() failed")
+
+    auth_header = _normalize_jwt_header(jwt_raw) or _auth_header_jwt()
+    if not auth_header or auth_header.strip().lower() in {"jwt", "bearer"}:
+        log.error("news: jwt unavailable")
+        return JSONResponse({"error": "jwt_unavailable"}, status_code=502)
+
+    headers = _news_headers(auth_header)
+    mid_value = mid or str(int(time.time() * 1000))
+    base_params = {"mid": mid_value, "ngsw-bypass": "true"}
+
+    upstream_filters: Optional[Dict[str, Any]] = None
+    page_payload: Optional[Dict[str, Any]] = None
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as cli:
+            if not qid_value:
+                search_body: Dict[str, Any] = {
+                    "content": content_value,
+                    "page": 1,
+                    "size": size,
+                }
+                if filter_signature:
+                    search_body["filter"] = filter_signature
+                try:
+                    resp_search = await cli.post(
+                        "https://api.matriksdata.com/dumrul/v2/news/search",
+                        headers=headers,
+                        params=base_params,
+                        json=search_body,
+                    )
+                except httpx.TimeoutException:
+                    return JSONResponse(
+                        {"error": "timeout", "stage": "search"}, status_code=504
+                    )
+                except Exception:
+                    log.exception("news search upstream error")
+                    return JSONResponse(
+                        {"error": "proxy_failed", "stage": "search"}, status_code=502
+                    )
+
+                if resp_search.status_code != 200:
+                    log.warning(
+                        "news search upstream %s: %s",
+                        resp_search.status_code,
+                        resp_search.text[:200],
+                    )
+                    return JSONResponse(
+                        {
+                            "error": "upstream",
+                            "stage": "search",
+                            "status": resp_search.status_code,
+                        },
+                        status_code=502,
+                    )
+
+                try:
+                    search_data = _parse_upstream_json(resp_search)
+                except Exception:
+                    log.exception("news search payload decode failed")
+                    return JSONResponse(
+                        {"error": "bad_payload", "stage": "search"}, status_code=502
+                    )
+
+                qid_value = _extract_qid(search_data)
+                if not qid_value:
+                    log.error("news search missing qid: %s", str(search_data)[:200])
+                    return JSONResponse({"error": "qid_missing"}, status_code=502)
+
+                upstream_filters = _extract_filters(search_data)
+                ts_now = time.time()
+                _NEWS_QID_CACHE[cache_key] = {"qid": qid_value, "ts": ts_now}
+                if len(_NEWS_QID_CACHE) > 64:
+                    for ck, entry in list(_NEWS_QID_CACHE.items()):
+                        if ts_now - entry.get("ts", 0.0) > (_NEWS_QID_TTL * 4):
+                            _NEWS_QID_CACHE.pop(ck, None)
+
+            page_params = dict(base_params)
+            page_params.update(
+                {
+                    "qid": qid_value,
+                    "page": page,
+                    "size": size,
+                    "content": content_value,
+                    "filter": json.dumps(filter_signature or {}, ensure_ascii=False),
+                }
+            )
+
+            try:
+                resp_page = await cli.get(
+                    "https://api.matriksdata.com/dumrul/v2/news/search/page.gz",
+                    headers=headers,
+                    params=page_params,
+                )
+            except httpx.TimeoutException:
+                return JSONResponse(
+                    {"error": "timeout", "stage": "page"}, status_code=504
+                )
+            except Exception:
+                log.exception("news page upstream error")
+                return JSONResponse(
+                    {"error": "proxy_failed", "stage": "page"}, status_code=502
+                )
+
+            if resp_page.status_code != 200:
+                log.warning(
+                    "news page upstream %s: %s",
+                    resp_page.status_code,
+                    resp_page.text[:200],
+                )
+                return JSONResponse(
+                    {
+                        "error": "upstream",
+                        "stage": "page",
+                        "status": resp_page.status_code,
+                    },
+                    status_code=502,
+                )
+
+            try:
+                parsed_page = _parse_upstream_json(resp_page)
+            except Exception:
+                log.exception("news page payload decode failed")
+                return JSONResponse(
+                    {"error": "bad_payload", "stage": "page"}, status_code=502
+                )
+
+            page_payload = parsed_page if isinstance(parsed_page, dict) else {}
+            upstream_filters = _extract_filters(page_payload) or upstream_filters
+
+    except Exception:
+        log.exception("news proxy unexpected error")
+        return JSONResponse({"error": "proxy_failed"}, status_code=502)
+
+    if page_payload is None:
+        return JSONResponse({"error": "empty_payload"}, status_code=502)
+
+    items = _extract_items(page_payload)
+    if not isinstance(items, list):
+        items = []
+
+    meta_section = _extract_pagination_meta(page_payload)
+    page_index = _first_numeric(
+        [
+            "page",
+            "pageIndex",
+            "page_number",
+            "number",
+            "index",
+        ],
+        meta_section,
+        page_payload,
+    )
+    size_value = _first_numeric(
+        [
+            "size",
+            "pageSize",
+            "perPage",
+            "limit",
+        ],
+        meta_section,
+        page_payload,
+    )
+    total_items = _first_numeric(
+        [
+            "total",
+            "totalItems",
+            "totalElements",
+            "total_records",
+        ],
+        meta_section,
+        page_payload,
+    )
+    total_pages = _first_numeric(
+        [
+            "totalPages",
+            "pageCount",
+            "pages",
+        ],
+        meta_section,
+        page_payload,
+    )
+
+    if page_index is None:
+        page_index = page
+    if size_value is None:
+        size_value = size
+
+    page_index_for_calc = max(page_index or 1, 1)
+    size_for_calc = max(size_value or size, 1)
+
+    has_more = False
+    if total_items is not None and total_items >= 0:
+        consumed = (page_index_for_calc - 1) * size_for_calc + len(items)
+        has_more = consumed < total_items
+    elif total_pages is not None and total_pages >= 0:
+        has_more = page_index_for_calc < max(total_pages, 0)
+    else:
+        has_more = len(items) >= size_for_calc
+
+    pagination = {
+        "page": page_index,
+        "page_size": size_value,
+        "total_items": total_items,
+        "total_pages": total_pages,
+        "has_more": has_more,
+        "cache_hit": cache_hit,
+    }
+
+    filters_out: Dict[str, Any] = {
+        "content": content_value,
+        "applied": filter_signature,
+    }
+    if upstream_filters:
+        filters_out["upstream"] = upstream_filters
+
+    meta_extra = {
+        "mid": mid_value,
+        "received_at": int(time.time() * 1000),
+    }
+
+    return {
+        "qid": qid_value,
+        "items": items,
+        "pagination": pagination,
+        "filters": filters_out,
+        "meta": meta_extra,
+    }
 
 
 @app.get("/webapp/akd", response_class=HTMLResponse)
