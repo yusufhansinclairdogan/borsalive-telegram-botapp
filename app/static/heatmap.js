@@ -1,14 +1,14 @@
-(function(){
+(function () {
   "use strict";
 
-  const qs = (sel, el=document) => el.querySelector(sel);
+  const qs = (sel, el = document) => el.querySelector(sel);
   const clamp = (val, min, max) => Math.min(max, Math.max(min, val));
-  const fmtNumber = (v, d=2) => {
+  const fmtNumber = (v, d = 2) => {
     const n = Number(v);
     if (!Number.isFinite(n)) return "—";
     return n.toLocaleString("tr-TR", { minimumFractionDigits: d, maximumFractionDigits: d });
   };
-  const fmtPercent = (v, d=2) => {
+  const fmtPercent = (v, d = 2) => {
     const n = Number(v);
     if (!Number.isFinite(n)) return "—";
     const formatted = n.toLocaleString("tr-TR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -42,19 +42,19 @@
     moon: '<span class="knob"></span><svg class="moon" viewBox="0 0 24 24" width="18" height="18"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path></svg>'
   };
 
-  function paintThemeIcon(){
+  function paintThemeIcon() {
     if (!themeBtn) return;
     const dark = root.classList.contains("dark");
     themeBtn.innerHTML = dark ? THEME_ICONS.sun : THEME_ICONS.moon;
   }
 
-  if (themeBtn){
-    themeBtn.addEventListener("click", ()=>{
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
       root.classList.toggle("dark");
-      try { localStorage.setItem("theme", root.classList.contains("dark") ? "dark" : "light"); } catch(err) {}
+      try { localStorage.setItem("theme", root.classList.contains("dark") ? "dark" : "light"); } catch (err) { }
       paintThemeIcon();
     });
-    themeBtn.addEventListener("pointerdown", (e)=> e.preventDefault(), { passive: false });
+    themeBtn.addEventListener("pointerdown", (e) => e.preventDefault(), { passive: false });
     paintThemeIcon();
   }
 
@@ -78,28 +78,28 @@
 
   const tiles = new Map();
 
-  function setStatus(text){
+  function setStatus(text) {
     if (statusEl) statusEl.textContent = text;
   }
 
-  function setLive(on){
+  function setLive(on) {
     if (liveBadge) liveBadge.classList.toggle("off", !on);
   }
 
-  function hideEmpty(){
+  function hideEmpty() {
     emptyEl && emptyEl.classList.add("hide");
   }
 
-  function showEmpty(msg){
-    if (emptyEl){
+  function showEmpty(msg) {
+    if (emptyEl) {
       emptyEl.textContent = msg || "Veri bekleniyor…";
       emptyEl.classList.remove("hide");
     }
   }
 
-  function gradientFor(pct){
+  function gradientFor(pct) {
     const n = Number(pct);
-    if (!Number.isFinite(n)){
+    if (!Number.isFinite(n)) {
       return {
         start: "rgba(30, 41, 59, 0.6)",
         stop: "rgba(15, 23, 42, 0.7)",
@@ -118,7 +118,7 @@
     };
   }
 
-  function ensureTile(symbol){
+  function ensureTile(symbol) {
     let tile = tiles.get(symbol);
     if (tile) return tile;
     tile = document.createElement("button");
@@ -153,13 +153,13 @@
 
     tile._refs = { symEl, pctEl, lastEl };
 
-    tile.addEventListener("click", ()=>{
+    tile.addEventListener("click", () => {
       const sym = tile.dataset.symbol;
       if (!sym) return;
       try {
         window.Telegram?.WebApp?.openLink?.(`/webapp/depth?symbol=${encodeURIComponent(sym)}`);
-      } catch(err) {}
-      if (!window.Telegram?.WebApp){
+      } catch (err) { }
+      if (!window.Telegram?.WebApp) {
         window.location.href = `/webapp/depth?symbol=${encodeURIComponent(sym)}`;
       }
     });
@@ -168,17 +168,17 @@
     return tile;
   }
 
-  function updateTile(tile, payload){
+  function updateTile(tile, payload) {
     const refs = tile._refs || {};
     if (refs.symEl) refs.symEl.textContent = tile.dataset.symbol;
 
     let pct = toNumber(payload.change_pct ?? payload.changePct ?? payload.pct ?? payload.changePercent ?? payload.diffPct);
     const last = toNumber(payload.last ?? payload.price ?? payload.close ?? payload.l);
     const prev = toNumber(payload.prev ?? payload.prev_close ?? payload.prevClose ?? payload.reference);
-    if (pct == null && last != null && prev){
+    if (pct == null && last != null && prev) {
       if (prev !== 0) pct = ((last - prev) / prev) * 100;
     }
-    if (pct == null && toNumber(payload.change) != null && last != null){
+    if (pct == null && toNumber(payload.change) != null && last != null) {
       const diff = Number(payload.change);
       if (last - diff !== 0) pct = (diff / (last - diff)) * 100;
     }
@@ -193,11 +193,11 @@
     tile.style.setProperty("--heat-stop", gradient.stop);
   }
 
-  function renderTiles(items){
+  function renderTiles(items) {
     if (!gridEl) return;
     const frag = document.createDocumentFragment();
     const seen = new Set();
-    for (const item of items){
+    for (const item of items) {
       const sym = normSymbol(item.symbol || item.sym || item.code || item.ticker);
       if (!sym || seen.has(sym)) continue;
       seen.add(sym);
@@ -207,8 +207,8 @@
     }
     gridEl.innerHTML = "";
     gridEl.appendChild(frag);
-    tiles.forEach((tile, sym)=>{ if (!seen.has(sym)) tiles.delete(sym); });
-    if (!seen.size){
+    tiles.forEach((tile, sym) => { if (!seen.has(sym)) tiles.delete(sym); });
+    if (!seen.size) {
       showEmpty("Veri bekleniyor…");
     } else {
       hideEmpty();
@@ -216,7 +216,7 @@
     }
   }
 
-  function updateNavTargets(symbol){
+  function updateNavTargets(symbol) {
     if (!symbol) return;
     const depthHref = `/webapp/depth?symbol=${encodeURIComponent(symbol)}`;
     const akdHref = `/webapp/akd?symbol=${encodeURIComponent(symbol)}`;
@@ -226,9 +226,11 @@
     if (drawerAkd) drawerAkd.href = akdHref;
   }
 
-  function normalizePayload(payload){
+  function normalizePayload(payload) {
     if (!payload) return [];
     if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload.quotes)) return payload.quotes;
+
     if (Array.isArray(payload.tiles)) return payload.tiles;
     if (Array.isArray(payload.symbols)) return payload.symbols;
     if (Array.isArray(payload.data)) return payload.data;
@@ -241,26 +243,26 @@
   let reconnectTimer = null;
   let backoff = 2000;
 
-  function connect(){
+  function connect() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const url = wsPath.startsWith("ws") ? wsPath : `${proto}://${location.host}${wsPath}`;
-    try { if (ws) ws.close(); } catch(err){}
+    try { if (ws) ws.close(); } catch (err) { }
     ws = new WebSocket(url);
     setStatus("Bağlanıyor…");
     setLive(false);
 
-    ws.addEventListener("open", ()=>{
+    ws.addEventListener("open", () => {
       setStatus("Bağlandı");
       setLive(true);
       backoff = 2000;
     });
 
-    ws.addEventListener("message", (ev)=>{
+    ws.addEventListener("message", (ev) => {
       let data = null;
       try { data = JSON.parse(ev.data); }
-      catch(err){ return; }
+      catch (err) { return; }
       if (data == null) return;
-      if (data.status){
+      if (data.status) {
         if (data.status === "connected") setStatus("Canlı veri hazır");
         else if (data.status === "reconnecting") setStatus("Kaynak yeniden bağlanıyor…");
       }
@@ -268,11 +270,11 @@
       const timeText = timeFromTs(ts) || timeFromTs(Date.now());
       if (timeText && lastUpdateEl) lastUpdateEl.textContent = `Son Güncelleme: ${timeText}`;
       const arr = normalizePayload(data);
-      if (arr && arr.length){
+      if (arr && arr.length) {
         const sorted = arr
-          .map((item)=>({ ...item, symbol: normSymbol(item.symbol || item.sym || item.code || item.ticker) }))
-          .filter((item)=> item.symbol)
-          .sort((a, b)=>{
+          .map((item) => ({ ...item, symbol: normSymbol(item.symbol || item.sym || item.code || item.ticker) }))
+          .filter((item) => item.symbol)
+          .sort((a, b) => {
             const ap = toNumber(a.change_pct ?? a.changePct ?? a.pct ?? a.changePercent ?? a.diffPct) ?? -9999;
             const bp = toNumber(b.change_pct ?? b.changePct ?? b.pct ?? b.changePercent ?? b.diffPct) ?? -9999;
             return bp - ap;
@@ -282,20 +284,20 @@
       }
     });
 
-    ws.addEventListener("close", ()=>{
+    ws.addEventListener("close", () => {
       setLive(false);
       setStatus("Bağlantı koptu, yeniden denenecek…");
       scheduleReconnect();
     });
 
-    ws.addEventListener("error", ()=>{
-      try { ws.close(); } catch(err){}
+    ws.addEventListener("error", () => {
+      try { ws.close(); } catch (err) { }
     });
   }
 
-  function scheduleReconnect(){
+  function scheduleReconnect() {
     if (reconnectTimer) return;
-    reconnectTimer = setTimeout(()=>{
+    reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
       backoff = Math.min(backoff * 1.6, 12000);
       connect();
@@ -304,19 +306,19 @@
 
   connect();
 
-  if (btnInfo && infoPanel){
-    btnInfo.addEventListener("click", ()=>{
+  if (btnInfo && infoPanel) {
+    btnInfo.addEventListener("click", () => {
       infoPanel.classList.toggle("open");
     });
   }
-  infoClose && infoClose.addEventListener("click", ()=> infoPanel.classList.remove("open"));
+  infoClose && infoClose.addEventListener("click", () => infoPanel.classList.remove("open"));
 
-  function openDrawer(){
+  function openDrawer() {
     drawer && drawer.classList.add("open");
     backdrop && backdrop.classList.add("show");
     document.documentElement.style.overflow = "hidden";
   }
-  function closeDrawer(){
+  function closeDrawer() {
     drawer && drawer.classList.remove("open");
     backdrop && backdrop.classList.remove("show");
     document.documentElement.style.overflow = "";
@@ -326,29 +328,29 @@
   btnCloseDrawer && btnCloseDrawer.addEventListener("click", closeDrawer);
   backdrop && backdrop.addEventListener("click", closeDrawer);
 
-  (function(){
+  (function () {
     const bar = qs("#bottombar");
     if (!bar) return;
     let lastY = window.scrollY;
     let ticking = false;
     let hidden = false;
-    function onScroll(){
+    function onScroll() {
       const y = window.scrollY;
       if (Math.abs(y - lastY) < 6) return;
-      if (y > lastY && !hidden){ bar.classList.add("hide"); hidden = true; }
-      else if (y < lastY && hidden){ bar.classList.remove("hide"); hidden = false; }
+      if (y > lastY && !hidden) { bar.classList.add("hide"); hidden = true; }
+      else if (y < lastY && hidden) { bar.classList.remove("hide"); hidden = false; }
       lastY = y;
     }
-    window.addEventListener("scroll", ()=>{
-      if (!ticking){
-        requestAnimationFrame(()=>{ onScroll(); ticking = false; });
+    window.addEventListener("scroll", () => {
+      if (!ticking) {
+        requestAnimationFrame(() => { onScroll(); ticking = false; });
         ticking = true;
       }
     });
   })();
 
-  document.addEventListener("visibilitychange", ()=>{
-    if (document.visibilityState === "visible" && (!ws || ws.readyState === WebSocket.CLOSED)){
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && (!ws || ws.readyState === WebSocket.CLOSED)) {
       connect();
     }
   });
