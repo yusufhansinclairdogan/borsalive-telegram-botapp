@@ -171,16 +171,13 @@ def _parse_upstream_json(resp: httpx.Response) -> Any:
 
 
 def _extract_qid(payload: Any) -> Optional[str]:
+    if isinstance(payload, list):
+        return payload
+
     if isinstance(payload, dict):
-        for key, value in payload.items():
-            if isinstance(key, str) and key.lower() in ("qid", "id"):
-                if isinstance(value, str):
-                    if value:
-                        return value
-                elif value is not None:
-                    value_str = str(value)
-                    if value_str:
-                        return value_str
+        qid = payload.get("qid")
+        if isinstance(qid, str) and qid:
+            return qid
         for key in ("data", "result", "response"):
             sub = payload.get(key)
             sub_qid = _extract_qid(sub)
@@ -1478,6 +1475,12 @@ async def api_news(
                 )
 
             page_payload = parsed_page if isinstance(parsed_page, dict) else {}
+            if isinstance(parsed_page, dict):
+                page_payload = parsed_page
+            elif isinstance(parsed_page, list):
+                page_payload = {"items": parsed_page}
+            else:
+                page_payload = {}
             upstream_filters = _extract_filters(page_payload) or upstream_filters
 
     except Exception:
