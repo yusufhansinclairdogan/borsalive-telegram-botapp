@@ -172,9 +172,15 @@ def _parse_upstream_json(resp: httpx.Response) -> Any:
 
 def _extract_qid(payload: Any) -> Optional[str]:
     if isinstance(payload, dict):
-        qid = payload.get("qid")
-        if isinstance(qid, str) and qid:
-            return qid
+        for key, value in payload.items():
+            if isinstance(key, str) and key.lower() in ("qid", "id"):
+                if isinstance(value, str):
+                    if value:
+                        return value
+                elif value is not None:
+                    value_str = str(value)
+                    if value_str:
+                        return value_str
         for key in ("data", "result", "response"):
             sub = payload.get(key)
             sub_qid = _extract_qid(sub)
@@ -1370,7 +1376,7 @@ async def api_news(
                     }
                 )
                 try:
-                    resp_search = await cli.post(
+                    resp_search = await cli.get(
                         "https://api.matriksdata.com/dumrul/v2/news/search",
                         headers=headers,
                         params=search_params,
