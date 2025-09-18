@@ -171,18 +171,43 @@ def _parse_upstream_json(resp: httpx.Response) -> Any:
 
 
 def _extract_qid(payload: Any) -> Optional[str]:
+    if isinstance(payload, str):
+        stripped = payload.strip()
+        return stripped or None
+    
+    
     if isinstance(payload, list):
-        return payload
+        for item in payload:
+            candidate = _extract_qid(item)
+            if isinstance(candidate, str) and candidate:
+                return candidate
+        return None
 
     if isinstance(payload, dict):
-        qid = payload.get("qid")
-        if isinstance(qid, str) and qid:
-            return qid
-        for key in ("data", "result", "response"):
-            sub = payload.get(key)
-            sub_qid = _extract_qid(sub)
-            if sub_qid:
-                return sub_qid
+        for key, value in payload.items():
+            lowered = key.lower()
+            if lowered in {"qid", "id"}:
+                if isinstance(value, str):
+                    stripped = value.strip()
+                    if stripped:
+                        return stripped
+                else:
+                    candidate = _extract_qid(value)
+                    if isinstance(candidate, str) and candidate:
+                        return candidate
+
+        nested_keys = ("data", "result", "response", "payload", "body")
+        for key in nested_keys:
+            if key in payload:
+                candidate = _extract_qid(payload.get(key))
+                if isinstance(candidate, str) and candidate:
+                    return candidate
+
+        for value in payload.values():
+            if isinstance(value, (dict, list)):
+                candidate = _extract_qid(value)
+                if isinstance(candidate, str) and candidate:
+                    return candidate
     return None
 
 
