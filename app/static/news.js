@@ -717,6 +717,64 @@
     const str = value.toString().trim();
     return str ? str : "Belirtilmemiş";
   }
+  function formatImportanceLevel(value) {
+    if (value === null || value === undefined) return "Belirtilmemiş";
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      if (numeric >= 4) return "Kritik";
+      if (numeric === 3) return "Çok Önemli";
+      if (numeric === 2) return "Önemli";
+      if (numeric === 1) return "Normal";
+    }
+
+    const str = value.toString().trim();
+    if (!str) return "Belirtilmemiş";
+
+    const normalized = str.toLowerCase();
+    switch (normalized) {
+      case "normal":
+        return "Normal";
+      case "onemli":
+      case "önemli":
+      case "important":
+        return "Önemli";
+      case "cok önemli":
+      case "çok önemli":
+      case "cok onemli":
+      case "çok onemli":
+      case "very important":
+        return "Çok Önemli";
+      case "kritik":
+      case "critical":
+        return "Kritik";
+      default:
+        return "Belirtilmemiş";
+    }
+  }
+
+  function formatImpactHorizon(value) {
+    if (value === null || value === undefined) return "Belirtilmemiş";
+    const str = value.toString().trim();
+    if (!str) return "Belirtilmemiş";
+
+    const normalized = str
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/[_\s]+/g, "-");
+
+    switch (normalized) {
+      case "short-term":
+        return "Kısa Vade";
+      case "mid-term":
+      case "medium-term":
+        return "Orta Vade";
+      case "long-term":
+        return "Uzun Vade";
+      default:
+        return "Belirtilmemiş";
+    }
+  }
   let aiModalInstance = null;
 
   function ensureAiModal() {
@@ -858,8 +916,9 @@
     const summaryText = data?.summary || "Özet bulunamadı.";
     const sentimentLabel = data?.sentimentLabel || "Belirtilmemiş";
     const sentimentClass = data?.sentimentClass || "";
-    const importanceText = data?.importance || "Belirtilmemiş";
-    const impactText = data?.impact || "Belirtilmemiş";
+    const importanceText = formatImportanceLevel(data?.importance);
+    const impactText = formatImpactHorizon(data?.impact);
+
 
     instance.timerId = window.setTimeout(() => {
       spinner.hidden = true;
@@ -1199,8 +1258,8 @@
             summary: displaySummary || "Özet bulunamadı.",
             sentimentLabel,
             sentimentClass: aiSentimentRaw && sentimentInfo ? sentimentInfo.className : "",
-            importance: formatAnalysisValue(importance),
-            impact: formatAnalysisValue(impact),
+            importance,
+            impact,
           },
           {
             triggerButton: aiButton,
@@ -1251,8 +1310,8 @@
             value: sentimentInfo ? sentimentInfo.label : formatAnalysisValue(sentimentRaw),
             className: sentimentInfo ? sentimentInfo.className : "",
           },
-          { label: "Önem", value: formatAnalysisValue(importance) },
-          { label: "Etki", value: formatAnalysisValue(impact) },
+          { label: "Önem", value: formatImportanceLevel(importance) },
+          { label: "Etki", value: formatImpactHorizon(impact) },
         ];
 
         metrics.forEach((metric) => {
