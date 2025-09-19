@@ -52,7 +52,8 @@
 
   const symbolsEndpoint = window.SYMBOLS_API || "/api/sectoral-brief";
   const newsEndpoint = window.NEWS_API || "/api/news";
-
+  const PAGE_SIZE = 5;
+  let analysisPanelCounter = 0;
   const state = {
     symbol: (window.SYMBOL || "").toString().trim().toUpperCase(),
     filters: {
@@ -66,6 +67,162 @@
     hasMore: true,
     loading: false,
   };
+  function normaliseFilterValue(value) {
+    return (value || "").toString().trim().toUpperCase();
+  }
+
+  function buildLookup(map) {
+    const lookup = {};
+    Object.entries(map).forEach(([key, values]) => {
+      const set = new Set([normaliseFilterValue(key)]);
+      values.forEach((val) => {
+        const norm = normaliseFilterValue(val);
+        if (norm) set.add(norm);
+      });
+      lookup[key] = set;
+    });
+    return lookup;
+  }
+
+  const CATEGORY_LOOKUP = buildLookup({
+    company: ["SIRKET", "ŞİRKET", "COMPANY"],
+    economy: ["EKONOMI", "EKONOMİ", "ECONOMY", "MAKRO", "MACRO"],
+    global: ["GLOBAL", "DUNYA", "DÜNYA", "INTERNATIONAL", "WORLD"],
+    analysis: ["ANALIZ", "ANALİZ", "ANALYSIS", "RESEARCH", "DEGERLENDIRME", "DEĞERLENDİRME"],
+  });
+
+  const SENTIMENT_LOOKUP = buildLookup({
+    positive: ["POZITIF", "POZİTİF", "POSITIVE", "OLUMLU"],
+    neutral: ["NOTR", "NÖTR", "NEUTRAL"],
+    negative: ["NEGATIF", "NEGATİF", "NEGATIVE", "OLUMSUZ"],
+  });
+
+  const KAP_SOURCES = new Set(["KAP", "KAMUYU AYDINLATMA PLATFORMU"].map(normaliseFilterValue));
+  const DAY_MS = 86400000;
+
+  function resolveTimestamp(item) {
+    const candidates = [
+      item?.timestamp,
+      item?.published_at,
+      item?.publishedAt,
+      item?.time,
+      item?.created_at,
+      item?.createdAt,
+      item?.date,
+    ];
+    for (const candidate of candidates) {
+      const ms = normaliseTimestamp(candidate);
+      if (ms !== null) return ms;
+    }
+    return null;
+  }
+
+  function normaliseTimestamp(value) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      if (value > 1e12) return value;
+      if (value > 1e9) return value * 1000;
+      return Math.round(value * 1000);
+    }
+    if (typeof value === "string" && value) {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      const numeric = Number(trimmed);
+      if (Number.isFinite(numeric)) {
+        return normaliseTimestamp(numeric);
+      }
+      const parsed = Date.parse(trimmed);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+    if (value instanceof Date) {
+      const time = value.getTime();
+      return Number.isFinite(time) ? time : null;
+    }
+    return null;
+  }
+
+  function getRangeThreshold(range) {
+    switch (range) {
+      case "today": {
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        return now.getTime();
+      }
+      case "week":
+        return Date.now() - 7 * DAY_MS;
+      case "month":
+        return Date.now() - 30 * DAY_MS;
+      default:
+        return null;
+    }
+  }
+
+  function getItemCategories(item) {
+    if (Array.isArray(item?.categories)) return item.categories;
+    if (Array.isArray(item?.category)) return item.category;
+    if (item?.category != null) return [item.category];
+    return [];
+  }
+
+  function getItemSources(item) {
+    if (Array.isArray(item?.source)) return item.source;
+    if (item?.source != null) return [item.source];
+    if (Array.isArray(item?.sources)) return item.sources;
+    return [];
+  }
+
+  function isKapNews(item) {
+    const sources = getItemSources(item).map(normaliseFilterValue).filter(Boolean);
+    if (sources.some((src) => KAP_SOURCES.has(src))) return true;
+    return Boolean(item?.is_kap || item?.isKap);
+  }
+
+  function matchesCategories(item) {
+    if (!state.filters.categories.size) return true;
+    const categories = getItemCategories(item)
+      .map(normaliseFilterValue)
+      .filter(Boolean);
+    if (!categories.length) return false;
+    for (const key of state.filters.categories) {
+      let lookup = CATEGORY_LOOKUP[key];
+      if (!lookup) {
+        lookup = new Set([normaliseFilterValue(key)]);
+        CATEGORY_LOOKUP[key] = lookup;
+      }
+      if (categories.some((cat) => lookup.has(cat))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function matchesSentiment(item) {
+    if (!state.filters.sentiment || state.filters.sentiment === "all") return true;
+    const sentiment = normaliseFilterValue(item?.sentiment);
+    if (!sentiment) return false;
+    let lookup = SENTIMENT_LOOKUP[state.filters.sentiment];
+    if (!lookup) {
+      lookup = new Set([normaliseFilterValue(state.filters.sentiment)]);
+      SENTIMENT_LOOKUP[state.filters.sentiment] = lookup;
+    }
+    return lookup.has(sentiment);
+  }
+
+  function withinRange(item, rangeStart) {
+    if (!state.filters.range || state.filters.range === "all") return true;
+    if (rangeStart == null) return true;
+    const ts = resolveTimestamp(item);
+    if (ts === null) return false;
+    return ts >= rangeStart;
+  }
+
+  function shouldRenderItem(item, opts = {}) {
+    const { rangeStart = null } = opts;
+    if (state.filters.kapOnly && !isKapNews(item)) return false;
+    if (!matchesCategories(item)) return false;
+    if (!matchesSentiment(item)) return false;
+    if (!withinRange(item, rangeStart)) return false;
+    return true;
+  }
 
   if (state.symbol && symbolInput) {
     symbolInput.value = state.symbol;
@@ -434,6 +591,69 @@
       container.appendChild(p);
     });
   }
+  function flattenAiAnalysis(item) {
+    if (!item || typeof item !== "object") return item;
+    const analysis = item.aiAnalysis || item.ai_analysis;
+    if (!analysis || typeof analysis !== "object") return item;
+
+    const summary = analysis.summary ?? analysis.ai_summary;
+    if (summary && !item.ai_summary) {
+      item.ai_summary = summary;
+    }
+    if (summary && !item.summary) {
+      item.summary = summary;
+    }
+    const sentiment = analysis.sentiment;
+    if (sentiment && !item.sentiment) {
+      item.sentiment = sentiment;
+    }
+    if (sentiment && !item.ai_sentiment) {
+      item.ai_sentiment = sentiment;
+    }
+    const importance = analysis.importance;
+    if (importance && !item.ai_importance) {
+      item.ai_importance = importance;
+    }
+    if (importance && !item.importance) {
+      item.importance = importance;
+    }
+    const impact = analysis.impact;
+    if (impact && !item.ai_impact) {
+      item.ai_impact = impact;
+    }
+    if (impact && !item.impact) {
+      item.impact = impact;
+    }
+    return item;
+  }
+
+  function normaliseSentiment(value) {
+    const text = (value ?? "").toString().trim().toLowerCase();
+    if (!text) return null;
+    const positive = ["positive", "pozitif", "olumlu", "+"];
+    const negative = ["negative", "negatif", "olumsuz", "-"];
+    const neutral = ["neutral", "notr", "nötr", "not", "tarafsız", "tarafsiz", "0"];
+
+    const inList = (list) => list.some((keyword) => text.startsWith(keyword));
+
+    if (inList(positive)) {
+      return { label: "Olumlu", className: "sentiment-positive" };
+    }
+    if (inList(negative)) {
+      return { label: "Olumsuz", className: "sentiment-negative" };
+    }
+    if (inList(neutral)) {
+      return { label: "Nötr", className: "sentiment-neutral" };
+    }
+
+    return { label: text, className: "sentiment-neutral" };
+  }
+
+  function formatAnalysisValue(value) {
+    if (value === null || value === undefined) return "Belirtilmemiş";
+    const str = value.toString().trim();
+    return str ? str : "Belirtilmemiş";
+  }
 
   function createBadge(label, extraClass = "") {
     const span = document.createElement("span");
@@ -444,6 +664,21 @@
 
   function renderNewsCard(item) {
     if (!newsListEl) return;
+    const analysis = item?.aiAnalysis || item?.ai_analysis || {};
+    const aiSummary = item?.ai_summary ?? analysis.summary ?? "";
+    const fallbackSummary = item?.summary ?? "";
+    const displaySummary = aiSummary || fallbackSummary;
+    const aiSentimentRaw = item?.ai_sentiment ?? analysis?.sentiment ?? "";
+    const fallbackSentiment = item?.sentiment ?? "";
+    const sentimentRaw = aiSentimentRaw || fallbackSentiment;
+    const sentimentInfo = normaliseSentiment(aiSentimentRaw || sentimentRaw);
+    const importance = item?.ai_importance ?? analysis?.importance ?? "";
+    const impact = item?.ai_impact ?? analysis?.impact ?? "";
+    const hasAnalysis = Boolean(
+      (analysis && (analysis.summary || analysis.sentiment || analysis.importance || analysis.impact)) ||
+      aiSummary || aiSentimentRaw || importance || impact
+    );
+
     const card = document.createElement("article");
     card.className = "news-card";
     card.setAttribute("role", "article");
@@ -457,12 +692,18 @@
 
     const title = document.createElement("div");
     title.className = "news-title";
-    title.textContent = item?.title || "Başlıksız haber";
+
+    const headlineText =
+      (typeof item?.headline === "string" && item.headline.trim()) ||
+      (typeof item?.title === "string" && item.title.trim()) ||
+      item?.title ||
+      "Başlıksız haber";
+    title.textContent = headlineText;
 
     const source = document.createElement("div");
     source.className = "news-source";
     const src = item?.source || item?.provider || "";
-    const categories = Array.isArray(item?.categories) ? item.categories : (item?.category ? [item.category] : []);
+    const categories = getItemCategories(item);
     const sourcePieces = [];
     if (src) sourcePieces.push(src);
     const when = formatDate(item?.published_at || item?.publishedAt || item?.time || item?.timestamp);
@@ -481,25 +722,15 @@
     const badgeWrap = document.createElement("div");
     badgeWrap.className = "badges";
 
-    if (item?.ai_summary || item?.summary) {
+    if (aiSummary) {
       badgeWrap.appendChild(createBadge("AI Özet"));
     }
 
-    const sentiment = (item?.sentiment || "").toString().toLowerCase();
-    if (sentiment) {
-      let cls = "sentiment-neutral";
-      let label = "Nötr";
-      if (sentiment.startsWith("pos")) {
-        cls = "sentiment-positive";
-        label = "Olumlu";
-      } else if (sentiment.startsWith("neg")) {
-        cls = "sentiment-negative";
-        label = "Olumsuz";
-      }
-      badgeWrap.appendChild(createBadge(label, cls));
+    if (aiSentimentRaw && sentimentInfo) {
+      badgeWrap.appendChild(createBadge(sentimentInfo.label, sentimentInfo.className));
     }
 
-    if (item?.is_kap || state.filters.kapOnly) {
+    if (isKapNews(item) || state.filters.kapOnly) {
       badgeWrap.appendChild(createBadge("KAP", "kap"));
     }
 
@@ -516,14 +747,9 @@
     const body = document.createElement("div");
     body.className = "news-body";
 
-    if (item?.ai_summary) {
+    if (displaySummary) {
       const summary = document.createElement("p");
-      summary.textContent = item.ai_summary;
-      summary.classList.add("summary");
-      body.appendChild(summary);
-    } else if (item?.summary) {
-      const summary = document.createElement("p");
-      summary.textContent = item.summary;
+      summary.textContent = displaySummary;
       summary.classList.add("summary");
       body.appendChild(summary);
     }
@@ -567,6 +793,81 @@
 
     newsListEl.appendChild(card);
   }
+    if (hasAnalysis) {
+      const actions = document.createElement("div");
+      actions.className = "analysis-actions";
+      const toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.className = "analysis-toggle";
+      toggleBtn.textContent = "Yapay Zeka ile Analiz Et";
+      toggleBtn.setAttribute("aria-expanded", "false");
+      const panelId = `analysis-panel-${analysisPanelCounter++}`;
+      toggleBtn.setAttribute("aria-controls", panelId);
+      actions.appendChild(toggleBtn);
+
+      const panel = document.createElement("div");
+      panel.className = "analysis-panel";
+      panel.id = panelId;
+      panel.hidden = true;
+
+      const summaryBlock = document.createElement("div");
+      summaryBlock.className = "analysis-section";
+      const summaryTitle = document.createElement("div");
+      summaryTitle.className = "analysis-section-title";
+      summaryTitle.textContent = "Özet";
+      const summaryParagraph = document.createElement("p");
+      summaryParagraph.className = "analysis-summary";
+      summaryParagraph.textContent = displaySummary ? displaySummary : "Özet bulunamadı.";
+      summaryBlock.appendChild(summaryTitle);
+      summaryBlock.appendChild(summaryParagraph);
+      panel.appendChild(summaryBlock);
+
+      const metricsBlock = document.createElement("div");
+      metricsBlock.className = "analysis-section metrics";
+      const metricsTitle = document.createElement("div");
+      metricsTitle.className = "analysis-section-title";
+      metricsTitle.textContent = "Metrikler";
+      metricsBlock.appendChild(metricsTitle);
+
+      const metricsList = document.createElement("dl");
+      metricsList.className = "analysis-metrics";
+
+      const metrics = [
+        {
+          label: "Duygu",
+          value: aiSentimentRaw && sentimentInfo ? sentimentInfo.label : "Belirtilmemiş",
+          className: aiSentimentRaw && sentimentInfo ? sentimentInfo.className : "",
+        },
+        { label: "Önem", value: formatAnalysisValue(importance) },
+        { label: "Etki", value: formatAnalysisValue(impact) },
+      ];
+
+      metrics.forEach((metric) => {
+        const dt = document.createElement("dt");
+        dt.textContent = metric.label;
+        metricsList.appendChild(dt);
+        const dd = document.createElement("dd");
+        dd.textContent = metric.value;
+        if (metric.className) {
+          dd.classList.add(metric.className);
+        }
+        metricsList.appendChild(dd);
+      });
+
+      metricsBlock.appendChild(metricsList);
+      panel.appendChild(metricsBlock);
+
+      toggleBtn.addEventListener("click", () => {
+        const hidden = panel.hidden;
+        panel.hidden = !hidden;
+        toggleBtn.setAttribute("aria-expanded", hidden ? "true" : "false");
+        toggleBtn.classList.toggle("active", hidden);
+      });
+
+      body.appendChild(actions);
+      body.appendChild(panel);
+    }
+
 
   async function fetchNews({ reset = false } = {}) {
     if (state.loading) return;
@@ -579,11 +880,8 @@
     try {
       const params = new URLSearchParams();
       if (state.symbol) params.set("symbol", state.symbol);
-      if (state.filters.kapOnly) params.set("kap", "true");
-      if (state.filters.categories.size) params.set("categories", Array.from(state.filters.categories).join(","));
-      if (state.filters.sentiment && state.filters.sentiment !== "all") params.set("sentiment", state.filters.sentiment);
-      if (state.filters.range && state.filters.range !== "today") params.set("range", state.filters.range);
       if (state.page) params.set("page", String(state.page));
+      params.set("size", String(PAGE_SIZE));
       if (state.cursor) params.set("cursor", state.cursor);
 
       const url = `${newsEndpoint}?${params.toString()}`;
@@ -596,15 +894,22 @@
           ? payload.results
           : [];
 
-      if (!items.length && reset) {
+      const rangeStart = getRangeThreshold(state.filters.range);
+      const filteredItems = items.filter((item) => {
+        try {
+          return shouldRenderItem(item, { rangeStart });
+        } catch (err) {
+          return false;
+        }
+      });
+
+      if (!filteredItems.length && reset) {
         if (newsEmptyEl) newsEmptyEl.hidden = false;
-        setStatus("Haber bulunamadı");
-        setLive(false);
-        loadMoreBtn && (loadMoreBtn.hidden = true);
-        return;
+      } else if (filteredItems.length && newsEmptyEl) {
+        newsEmptyEl.hidden = true;
       }
 
-      items.forEach((item) => {
+      items.map(flattenAiAnalysis).forEach((item) => {
         try { renderNewsCard(item); } catch (err) { }
       });
 
@@ -628,18 +933,21 @@
         state.page += 1;
       }
 
-      loadMoreBtn && (loadMoreBtn.hidden = !state.hasMore);
-      if (!state.hasMore) {
-        loadMoreBtn && (loadMoreBtn.hidden = true);
+      const showLoadMore = state.hasMore && (filteredItems.length > 0 || !reset);
+      if (loadMoreBtn) {
+        loadMoreBtn.hidden = !showLoadMore;
       }
 
-      if (items.length) {
-        setStatus(`${items.length} haber yüklendi`);
+      if (filteredItems.length) {
+        setStatus(`${filteredItems.length} haber yüklendi`);
         updateLastUpdate(new Date());
         setLive(true);
       } else {
-        setStatus("Yeni haber yok");
-        setLive(false);
+        if (reset) {
+          setStatus("Bu filtrelerle haber bulunamadı");
+        } else {
+          setStatus("Yeni haber yok");
+        } setLive(false);
       }
     } catch (err) {
       console.error("news fetch failed", err);
@@ -689,8 +997,14 @@
   });
 
   function init() {
-    try { window.Telegram?.WebApp?.ready?.(); } catch (err) { }
-    try { window.Telegram?.WebApp?.expand?.(); } catch (err) { }
+    const webApp = window.Telegram?.WebApp;
+    try {
+      webApp?.ready?.();
+      webApp?.expand?.();
+      webApp?.disableVerticalSwipe?.();
+      webApp?.enableClosingConfirmation?.(false);
+      webApp?.MainButton?.hide?.();
+    } catch (err) { }
 
     if (!state.symbol && symbolInput?.value) {
       state.symbol = normaliseSymbol(symbolInput.value);

@@ -45,6 +45,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
+  overscroll-behavior: contain;
   font: 15px/1.5 "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   padding-bottom: calc(env(safe-area-inset-bottom) + 80px);
 }

@@ -1269,12 +1269,15 @@ def _auth_header_jwt() -> str:
         return tok
     return f"jwt {tok}"
 
+NEWS_PAGE_SIZE = 5
+
+
 
 @app.get("/api/news")
 async def api_news(
     request: Request,
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
+    size: int = Query(NEWS_PAGE_SIZE, ge=1, le=NEWS_PAGE_SIZE),
     page_size: Optional[int] = Query(None),
     content: str = Query("ALL"),
     filters: Optional[str] = Query(None),
@@ -1287,7 +1290,7 @@ async def api_news(
             size = int(page_size)
         except (TypeError, ValueError):
             pass
-    size = max(1, min(size, 100))
+    size = max(1, min(size, NEWS_PAGE_SIZE))
 
     raw_filters: Dict[str, Any] = {}
     if filters:
