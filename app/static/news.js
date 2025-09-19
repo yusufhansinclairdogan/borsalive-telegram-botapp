@@ -1112,6 +1112,10 @@
       snippet.textContent = "Detayları görmek için açın.";
       snippet.classList.add("fallback");
     }
+    const readMore = document.createElement("span");
+    readMore.className = "read-more";
+    readMore.textContent = " Devamını oku…";
+    snippet.appendChild(readMore);
     body.appendChild(snippet);
 
     card.appendChild(head);
@@ -1306,7 +1310,9 @@
       });
     }
 
-    body.appendChild(actions);
+    if (modalBody) {
+      modalBody.appendChild(actions);
+    }
     if (modalAnalysis) {
       modalAnalysis.innerHTML = "";
       modalAnalysis.hidden = true;
