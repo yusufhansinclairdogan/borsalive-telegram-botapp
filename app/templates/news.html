@@ -116,7 +116,22 @@
       <div id="newsEmpty" class="empty" hidden>Bu filtrelerle haber bulunamadı.</div>
       <div id="newsLoading" class="loading">Yükleniyor…</div>
       <div id="newsList" class="news-list" role="feed"></div>
-      <button id="loadMore" class="load-more" type="button" hidden>Daha fazla yükle</button>
+      <div id="pagination" class="pagination" hidden>
+        <div class="pagination-size">
+          <label for="pageSizeSelect">Sayfa başı</label>
+          <select id="pageSizeSelect" class="page-size-select" aria-label="Sayfa başına haber">
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+        <nav class="pagination-nav" aria-label="Sayfalar">
+          <button type="button" class="page-btn" data-page-nav="prev" aria-label="Önceki sayfa">Önceki</button>
+          <div id="paginationPages" class="pagination-pages" role="list"></div>
+          <button type="button" class="page-btn" data-page-nav="next" aria-label="Sonraki sayfa">Sonraki</button>
+        </nav>
+        <div id="paginationMeta" class="pagination-meta" aria-live="polite"></div>
+      </div>
     </section>
   </div>
 
@@ -189,7 +204,7 @@
       <p>Hisse sembolünü aratarak veya listeden seçerek özel haberleri görebilirsiniz. KAP odaklı mod yalnızca Kamuyu
         Aydınlatma Platformu
         duyurularını listeler.</p>
-      <p>Kategori ve duygu filtreleri haber kartlarını anında yeniler. "Daha fazla yükle" butonuyla geçmişe doğru
+      <p>Kategori ve duygu filtreleri haber kartlarını anında yeniler. Sayfalama çubuğuyla geçmiş tarihlere doğru
         ilerleyebilirsiniz.</p>
     </div>
   </aside>

@@ -38,8 +38,12 @@
   const newsListEl = qs("#newsList");
   const newsLoadingEl = qs("#newsLoading");
   const newsEmptyEl = qs("#newsEmpty");
-  const loadMoreBtn = qs("#loadMore");
-  const symbolInput = qs("#symbolInput");
+  const paginationEl = qs("#pagination");
+  const paginationPagesEl = qs("#paginationPages");
+  const paginationMetaEl = qs("#paginationMeta");
+  const paginationPrevBtn = paginationEl ? qs("[data-page-nav='prev']", paginationEl) : null;
+  const paginationNextBtn = paginationEl ? qs("[data-page-nav='next']", paginationEl) : null;
+  const pageSizeSelect = qs("#pageSizeSelect"); const symbolInput = qs("#symbolInput");
   const symbolClear = qs("#symbolClear");
   const dropdownEl = qs("#symbolDropdown");
   const kapToggle = qs("#kapToggle");
@@ -65,8 +69,9 @@
   const modalLink = modal ? qs("#newsModalLink", modal) : null
   const symbolsEndpoint = window.SYMBOLS_API || "/api/sectoral-brief";
   const newsEndpoint = window.NEWS_API || "/api/news";
-  const PAGE_SIZE = 5;
-  const state = {
+  const DEFAULT_PAGE_SIZE = 20;
+  const PAGE_SIZE_OPTIONS = [10, 20, 50];
+  const MAX_PAGE_SIZE = Math.max(...PAGE_SIZE_OPTIONS); const state = {
     symbol: (window.SYMBOL || "").toString().trim().toUpperCase(),
     filters: {
       kapOnly: false,
@@ -75,8 +80,10 @@
       range: "today",
     },
     page: 1,
-    cursor: null,
+    pageSize: DEFAULT_PAGE_SIZE,
     hasMore: true,
+    totalPages: null,
+    totalItems: null,
     loading: false,
   };
   let scrollLockCount = 0;
@@ -272,8 +279,126 @@
     if (isLoading && reset && newsEmptyEl) {
       newsEmptyEl.hidden = true;
     }
-    if (loadMoreBtn) {
-      loadMoreBtn.disabled = isLoading;
+    renderPagination();
+  }
+
+  function normalisePageSize(size, { clamp = true } = {}) {
+    const numeric = Number(size);
+    if (!Number.isFinite(numeric)) {
+      return state.pageSize || DEFAULT_PAGE_SIZE;
+    }
+    const rounded = Math.max(1, Math.round(numeric));
+    if (!clamp) {
+      return rounded;
+    }
+    return Math.min(rounded, MAX_PAGE_SIZE);
+  }
+
+  function syncPageSizeSelect() {
+    if (!pageSizeSelect) return;
+    const value = String(state.pageSize || DEFAULT_PAGE_SIZE);
+    const options = Array.from(pageSizeSelect.options || []);
+    const exists = options.some((opt) => opt.value === value);
+    if (!exists) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      pageSizeSelect.appendChild(option);
+    }
+    pageSizeSelect.value = value;
+    pageSizeSelect.disabled = state.loading;
+  }
+
+  function computeTotalPages() {
+    if (Number.isFinite(state.totalPages) && state.totalPages > 0) {
+      return Math.max(1, Math.round(state.totalPages));
+    }
+    if (Number.isFinite(state.totalItems) && state.totalItems >= 0) {
+      const size = state.pageSize || DEFAULT_PAGE_SIZE;
+      return Math.max(1, Math.ceil(state.totalItems / Math.max(size, 1)));
+    }
+    return null;
+  }
+
+  function buildPageRange(current, total) {
+    const maxButtons = 5;
+    if (total && total > 0) {
+      if (total <= maxButtons + 2) {
+        return Array.from({ length: total }, (_, idx) => idx + 1);
+      }
+      const pages = new Set([1, total, current]);
+      let offset = 1;
+      while (pages.size < maxButtons) {
+        const prev = current - offset;
+        const next = current + offset;
+        if (prev >= 1) pages.add(prev);
+        if (next <= total) pages.add(next);
+        if (prev < 1 && next > total) break;
+        offset += 1;
+      }
+      return Array.from(pages).sort((a, b) => a - b);
+    }
+    const pages = [];
+    const start = Math.max(1, current - 2);
+    const end = state.hasMore ? current + 2 : current;
+    for (let page = start; page <= end; page += 1) {
+      pages.push(page);
+    }
+    return pages;
+  }
+
+  function renderPagination() {
+    if (!paginationEl) return;
+    syncPageSizeSelect();
+    const current = Math.max(1, Number(state.page) || 1);
+    const total = computeTotalPages();
+    const hasItems = !!(newsListEl && newsListEl.children.length);
+    const shouldShow = hasItems && (total ? total > 1 : current > 1 || state.hasMore);
+    paginationEl.hidden = !shouldShow;
+    if (paginationMetaEl) {
+      if (total) {
+        paginationMetaEl.textContent = `Sayfa ${current} / ${total}`;
+      } else {
+        paginationMetaEl.textContent = `Sayfa ${current}`;
+      }
+    }
+    if (!shouldShow) {
+      if (paginationPagesEl) paginationPagesEl.innerHTML = "";
+      if (paginationPrevBtn) paginationPrevBtn.disabled = true;
+      if (paginationNextBtn) paginationNextBtn.disabled = true;
+      return;
+    }
+
+    if (paginationPrevBtn) {
+      paginationPrevBtn.disabled = state.loading || current <= 1;
+    }
+    if (paginationNextBtn) {
+      const reachedEnd = total ? current >= total : !state.hasMore;
+      paginationNextBtn.disabled = state.loading || reachedEnd;
+    }
+
+    if (paginationPagesEl) {
+      paginationPagesEl.innerHTML = "";
+      const pages = buildPageRange(current, total || (state.hasMore ? current + 1 : current));
+      let lastPage = null;
+      pages.forEach((pageNumber) => {
+        if (lastPage !== null && pageNumber - lastPage > 1) {
+          const gap = document.createElement("span");
+          gap.className = "page-gap";
+          gap.textContent = "…";
+          paginationPagesEl.appendChild(gap);
+        }
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `page-link${pageNumber === current ? " active" : ""}`;
+        btn.dataset.page = String(pageNumber);
+        btn.textContent = String(pageNumber);
+        if (state.loading && pageNumber === current) {
+          btn.disabled = true;
+        }
+        paginationPagesEl.appendChild(btn);
+        lastPage = pageNumber;
+      });
     }
   }
 
@@ -468,9 +593,11 @@
 
   function resetFeed() {
     state.page = 1;
-    state.cursor = null;
-    state.hasMore = true;
+    state.totalPages = null;
+    state.totalItems = null; state.hasMore = true;
     if (newsListEl) newsListEl.innerHTML = "";
+    renderPagination();
+
   }
 
   function selectSymbol(sym) {
@@ -1403,21 +1530,28 @@
 
 
 
-  async function fetchNews({ reset = false } = {}) {
+  async function fetchNews({ reset = false, page = state.page, pageSize = state.pageSize } = {}) {
     if (state.loading) return;
-    if (reset) {
+    const prevPage = state.page || 1;
+    const prevSize = state.pageSize || DEFAULT_PAGE_SIZE;
+    const targetPage = Math.max(1, Math.round(Number(page) || prevPage || 1));
+    const targetSize = normalisePageSize(pageSize);
+    const shouldReplace = reset || targetPage !== prevPage || targetSize !== prevSize;
+
+    if (shouldReplace) {
       if (newsListEl) newsListEl.innerHTML = "";
       if (newsEmptyEl) newsEmptyEl.hidden = true;
     }
+    state.page = targetPage;
+    state.pageSize = targetSize;
     setStatus("Haberler yükleniyor…");
-    setLoading(true, { reset });
+    setLoading(true, { reset: shouldReplace });
     try {
       const params = new URLSearchParams();
       if (state.symbol) params.set("symbol", state.symbol);
-      if (state.page) params.set("page", String(state.page));
-      params.set("size", String(PAGE_SIZE));
-      if (state.cursor) params.set("cursor", state.cursor);
-
+      params.set("page", String(state.page));
+      params.set("size", String(state.pageSize));
+      params.set("page_size", String(state.pageSize));
       const url = `${newsEndpoint}?${params.toString()}`;
       const res = await fetch(url, { credentials: "same-origin" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1444,7 +1578,7 @@
         }
       });
 
-      if (!filteredItems.length && reset) {
+      if (!filteredItems.length && shouldReplace) {
         if (newsEmptyEl) newsEmptyEl.hidden = false;
       } else if (filteredItems.length && newsEmptyEl) {
         newsEmptyEl.hidden = true;
@@ -1454,29 +1588,50 @@
         try { renderNewsCard(item); } catch (err) { }
       });
 
-      const nextCursor = payload?.nextCursor || payload?.next_cursor || null;
-      const nextPage = payload?.nextPage || payload?.next_page || null;
-      const hasMoreFlag = payload?.hasMore ?? payload?.has_more;
-      state.cursor = nextCursor || null;
-      if (state.cursor) {
-        state.hasMore = true;
-      } else if (typeof hasMoreFlag === "boolean") {
-        state.hasMore = hasMoreFlag;
-      } else if (typeof nextPage === "number") {
-        state.hasMore = nextPage > state.page;
+      const paginationMeta = (payload && typeof payload.pagination === "object") ? payload.pagination : null;
+      if (paginationMeta) {
+        const pageValue = Number(paginationMeta.page ?? paginationMeta.pageIndex ?? paginationMeta.number ?? paginationMeta.index);
+        if (Number.isFinite(pageValue) && pageValue >= 1) {
+          state.page = Math.round(pageValue);
+        }
+        const sizeValueRaw = paginationMeta.page_size ?? paginationMeta.pageSize ?? paginationMeta.size ?? paginationMeta.perPage ?? paginationMeta.limit;
+        const sizeValue = Number(sizeValueRaw);
+        if (Number.isFinite(sizeValue) && sizeValue > 0) {
+          state.pageSize = normalisePageSize(sizeValue, { clamp: false });
+        }
+        const totalPagesRaw = paginationMeta.total_pages ?? paginationMeta.totalPages ?? paginationMeta.pageCount ?? paginationMeta.pages;
+        const totalPages = Number(totalPagesRaw);
+        state.totalPages = Number.isFinite(totalPages) && totalPages > 0 ? Math.round(totalPages) : null;
+        const totalItemsRaw = paginationMeta.total_items ?? paginationMeta.totalItems ?? paginationMeta.totalElements ?? paginationMeta.total_records;
+        const totalItems = Number(totalItemsRaw);
+        state.totalItems = Number.isFinite(totalItems) && totalItems >= 0 ? Math.round(totalItems) : null;
+        if (typeof paginationMeta.has_more === "boolean") {
+          state.hasMore = paginationMeta.has_more;
+        } else if (typeof paginationMeta.hasMore === "boolean") {
+          state.hasMore = paginationMeta.hasMore;
+        } else if (state.totalPages) {
+          state.hasMore = state.page < state.totalPages;
+        } else if (state.totalItems != null) {
+          const consumed = (state.page - 1) * state.pageSize + items.length;
+          state.hasMore = consumed < state.totalItems;
+        } else {
+          state.hasMore = items.length >= state.pageSize;
+        }
       } else {
-        state.hasMore = items.length > 0;
-      }
-
-      if (typeof nextPage === "number") {
-        state.page = nextPage;
-      } else if (items.length) {
-        state.page += 1;
-      }
-
-      const showLoadMore = state.hasMore && (filteredItems.length > 0 || !reset);
-      if (loadMoreBtn) {
-        loadMoreBtn.hidden = !showLoadMore;
+        const hasMoreFlag = payload?.hasMore ?? payload?.has_more;
+        if (typeof hasMoreFlag === "boolean") {
+          state.hasMore = hasMoreFlag;
+        } else {
+          state.hasMore = items.length >= state.pageSize;
+        }
+        const totalPages = Number(payload?.totalPages ?? payload?.total_pages);
+        if (Number.isFinite(totalPages) && totalPages > 0) {
+          state.totalPages = Math.round(totalPages);
+        }
+        const totalItems = Number(payload?.totalItems ?? payload?.total_items);
+        if (Number.isFinite(totalItems) && totalItems >= 0) {
+          state.totalItems = Math.round(totalItems);
+        }
       }
 
       if (filteredItems.length) {
@@ -1484,8 +1639,7 @@
         updateLastUpdate(new Date());
         setLive(true);
       } else {
-        if (reset) {
-          setStatus("Bu filtrelerle haber bulunamadı");
+        if (shouldReplace) {          setStatus("Bu filtrelerle haber bulunamadı");
         } else {
           setStatus("Yeni haber yok");
         }
@@ -1500,9 +1654,53 @@
     }
   }
 
-  loadMoreBtn && loadMoreBtn.addEventListener("click", () => {
-    if (!state.hasMore) return;
-    fetchNews();
+  function goToPage(pageNumber) {
+    if (state.loading) return;
+    const total = computeTotalPages();
+    let target = Math.max(1, Math.round(Number(pageNumber) || state.page || 1));
+    if (total) {
+      target = Math.min(target, total);
+    }
+    if (target === state.page) return;
+    fetchNews({ reset: true, page: target });
+  }
+
+  function changePageSize(size) {
+    const nextSize = normalisePageSize(size);
+    if (nextSize === state.pageSize && state.page === 1) {
+      return;
+    }
+    state.page = 1;
+    state.totalPages = null;
+    state.totalItems = null;
+    state.pageSize = nextSize;
+    state.hasMore = true;
+    renderPagination();
+    fetchNews({ reset: true, page: 1, pageSize: nextSize });
+  }
+
+  paginationPrevBtn && paginationPrevBtn.addEventListener("click", () => {
+    if (state.loading) return;
+    goToPage(state.page - 1);
+  });
+
+  paginationNextBtn && paginationNextBtn.addEventListener("click", () => {
+    if (state.loading) return;
+    const total = computeTotalPages();
+    if (total && state.page >= total) return;
+    goToPage(state.page + 1);
+  });
+
+  paginationPagesEl && paginationPagesEl.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-page]");
+    if (!btn || btn.disabled) return;
+    const pageValue = Number(btn.dataset.page);
+    if (!Number.isFinite(pageValue)) return;
+    goToPage(pageValue);
+  });
+
+  pageSizeSelect && pageSizeSelect.addEventListener("change", (ev) => {
+    changePageSize(ev.target.value);
   });
 
   function openDrawer() {
@@ -1573,6 +1771,7 @@
     updateNavLinks(state.symbol);
     updateUrl(state.symbol);
     refreshBrandLogo(state.symbol);
+    renderPagination();
     fetchNews({ reset: true });
   }
 
