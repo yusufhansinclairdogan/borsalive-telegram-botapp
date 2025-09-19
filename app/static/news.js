@@ -49,11 +49,22 @@
   const btnMenu = qs("#btnMenu");
   const btnCloseDrawer = qs("#drawerClose");
   const backdrop = qs("#backdrop");
-
+  const modalBackdrop = qs("#newsModalBackdrop");
+  const modal = qs("#newsModal");
+  const modalSurface = modal ? qs("[data-modal-surface]", modal) : null;
+  const modalClose = modal ? qs("#newsModalClose", modal) : null;
+  const modalTitle = modal ? qs("#newsModalTitle", modal) : null;
+  const modalMeta = modal ? qs("#newsModalMeta", modal) : null;
+  const modalRelative = modal ? qs("#newsModalRelative", modal) : null;
+  const modalSource = modal ? qs("#newsModalSource", modal) : null;
+  const modalBadges = modal ? qs("#newsModalBadges", modal) : null;
+  const modalBody = modal ? qs("#newsModalBody", modal) : null;
+  const modalAnalysis = modal ? qs("#newsModalAnalysis", modal) : null;
+  const modalTags = modal ? qs("#newsModalTags", modal) : null;
+  const modalLink = modal ? qs("#newsModalLink", modal) : null
   const symbolsEndpoint = window.SYMBOLS_API || "/api/sectoral-brief";
   const newsEndpoint = window.NEWS_API || "/api/news";
   const PAGE_SIZE = 5;
-  let analysisPanelCounter = 0;
   const state = {
     symbol: (window.SYMBOL || "").toString().trim().toUpperCase(),
     filters: {
@@ -67,6 +78,21 @@
     hasMore: true,
     loading: false,
   };
+  let scrollLockCount = 0;
+
+  function lockScroll() {
+    if (scrollLockCount === 0) {
+      document.documentElement.style.overflow = "hidden";
+    }
+    scrollLockCount += 1;
+  }
+
+  function unlockScroll() {
+    scrollLockCount = Math.max(0, scrollLockCount - 1);
+    if (scrollLockCount === 0) {
+      document.documentElement.style.overflow = "";
+    }
+  }
   function normaliseFilterValue(value) {
     return (value || "").toString().trim().toUpperCase();
   }
@@ -591,6 +617,43 @@
       container.appendChild(p);
     });
   }
+  function toPlainText(value) {
+    if (value == null) return "";
+    if (typeof value === "string") {
+      const template = document.createElement("template");
+      template.innerHTML = value;
+      const text = template.content.textContent || "";
+      return text.trim();
+    }
+    if (Array.isArray(value)) {
+      return value.map((part) => toPlainText(part)).filter(Boolean).join(" ").trim();
+    }
+    if (typeof value === "number") {
+      return value.toString();
+    }
+    if (typeof value === "object" && "text" in value) {
+      return toPlainText(value.text);
+    }
+    return value.toString().trim();
+  }
+
+  function deriveSnippet(item, summary) {
+    const candidates = [];
+    if (summary) candidates.push(summary);
+    const excerpt = item?.excerpt ?? item?.short_description ?? item?.shortDescription;
+    if (excerpt) candidates.push(excerpt);
+    if (item?.snippet) candidates.push(item.snippet);
+    if (item?.content_preview) candidates.push(item.content_preview);
+    if (item?.contentPreview) candidates.push(item.contentPreview);
+    if (item?.content) candidates.push(item.content);
+    if (item?.content_html) candidates.push(item.content_html);
+
+    for (const candidate of candidates) {
+      const text = toPlainText(candidate).replace(/\s+/g, " ").trim();
+      if (text) return text;
+    }
+    return "";
+  }
   function flattenAiAnalysis(item) {
     if (!item || typeof item !== "object") return item;
     const analysis = item.aiAnalysis || item.ai_analysis;
@@ -654,6 +717,204 @@
     const str = value.toString().trim();
     return str ? str : "Belirtilmemiş";
   }
+  let aiModalInstance = null;
+
+  function ensureAiModal() {
+    if (aiModalInstance) return aiModalInstance;
+
+    const overlay = document.createElement("div");
+    overlay.className = "ai-modal-overlay";
+    overlay.id = "aiAnalysisModal";
+    overlay.hidden = true;
+    overlay.setAttribute("aria-hidden", "true");
+
+    const modal = document.createElement("div");
+    modal.className = "ai-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "ai-modal-close";
+    closeBtn.setAttribute("aria-label", "Kapat");
+    closeBtn.innerHTML = "&times;";
+
+    const titleEl = document.createElement("h2");
+    titleEl.className = "ai-modal-title";
+    titleEl.id = "aiModalTitle";
+    modal.setAttribute("aria-labelledby", titleEl.id);
+
+    const body = document.createElement("div");
+    body.className = "ai-modal-body";
+
+    const spinner = document.createElement("div");
+    spinner.className = "ai-modal-spinner";
+
+    const content = document.createElement("div");
+    content.className = "ai-modal-content";
+
+    body.appendChild(spinner);
+    body.appendChild(content);
+
+    modal.appendChild(closeBtn);
+    modal.appendChild(titleEl);
+    modal.appendChild(body);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const instance = {
+      overlay,
+      modal,
+      closeBtn,
+      titleEl,
+      spinner,
+      content,
+      timerId: null,
+      callbacks: {},
+      triggerButton: null,
+    };
+
+    function handleClose() {
+      closeAiModal();
+    }
+
+    closeBtn.addEventListener("click", handleClose);
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay) handleClose();
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && !overlay.hidden) {
+        handleClose();
+      }
+    });
+
+    aiModalInstance = instance;
+    return instance;
+  }
+
+  function closeAiModal() {
+    if (!aiModalInstance) return;
+    const { overlay, modal, spinner, content } = aiModalInstance;
+    if (aiModalInstance.timerId) {
+      clearTimeout(aiModalInstance.timerId);
+      aiModalInstance.timerId = null;
+    }
+    overlay.classList.remove("visible");
+    modal.classList.remove("visible");
+    overlay.setAttribute("aria-hidden", "true");
+    document.documentElement.style.overflow = "";
+    setTimeout(() => {
+      overlay.hidden = true;
+      spinner.hidden = false;
+      modal.classList.remove("loading", "loaded");
+      content.innerHTML = "";
+    }, 320);
+    const callbacks = aiModalInstance.callbacks || {};
+    aiModalInstance.callbacks = {};
+    const triggerButton = aiModalInstance.triggerButton;
+    aiModalInstance.triggerButton = null;
+    if (typeof callbacks.onClose === "function") {
+      callbacks.onClose();
+    }
+    if (triggerButton) {
+      triggerButton.classList.remove("loading");
+      triggerButton.disabled = false;
+      try {
+        triggerButton.focus({ preventScroll: true });
+      } catch (err) {
+        triggerButton.focus();
+      }
+    }
+  }
+
+  function showAiModal(data, callbacks = {}) {
+    const instance = ensureAiModal();
+    const { overlay, modal, spinner, content, titleEl } = instance;
+    if (instance.timerId) {
+      clearTimeout(instance.timerId);
+      instance.timerId = null;
+    }
+
+    instance.callbacks = {
+      onLoaded: callbacks.onLoaded,
+      onClose: callbacks.onClose,
+    };
+    instance.triggerButton = callbacks.triggerButton || null;
+
+    overlay.hidden = false;
+    overlay.setAttribute("aria-hidden", "false");
+    requestAnimationFrame(() => {
+      overlay.classList.add("visible");
+      modal.classList.add("visible");
+    });
+    document.documentElement.style.overflow = "hidden";
+
+    modal.classList.remove("loaded");
+    modal.classList.add("loading");
+    spinner.hidden = false;
+    content.innerHTML = "";
+    titleEl.textContent = data?.title || "Yapay Zeka Özeti";
+
+    const summaryText = data?.summary || "Özet bulunamadı.";
+    const sentimentLabel = data?.sentimentLabel || "Belirtilmemiş";
+    const sentimentClass = data?.sentimentClass || "";
+    const importanceText = data?.importance || "Belirtilmemiş";
+    const impactText = data?.impact || "Belirtilmemiş";
+
+    instance.timerId = window.setTimeout(() => {
+      spinner.hidden = true;
+      modal.classList.remove("loading");
+      modal.classList.add("loaded");
+
+      const summarySection = document.createElement("div");
+      summarySection.className = "ai-modal-section";
+      const summaryTitle = document.createElement("div");
+      summaryTitle.className = "ai-modal-section-title";
+      summaryTitle.textContent = "Özet";
+      const summaryParagraph = document.createElement("p");
+      summaryParagraph.className = "ai-modal-summary";
+      summaryParagraph.textContent = summaryText;
+      summarySection.appendChild(summaryTitle);
+      summarySection.appendChild(summaryParagraph);
+      content.appendChild(summarySection);
+
+      const metricsSection = document.createElement("div");
+      metricsSection.className = "ai-modal-section";
+      const metricsTitle = document.createElement("div");
+      metricsTitle.className = "ai-modal-section-title";
+      metricsTitle.textContent = "Metrikler";
+      metricsSection.appendChild(metricsTitle);
+
+      const metricsList = document.createElement("dl");
+      metricsList.className = "ai-modal-metrics";
+
+      const metrics = [
+        { label: "Duygu", value: sentimentLabel, className: sentimentClass },
+        { label: "Önem", value: importanceText },
+        { label: "Etki", value: impactText },
+      ];
+
+      metrics.forEach((metric) => {
+        const dt = document.createElement("dt");
+        dt.textContent = metric.label;
+        metricsList.appendChild(dt);
+        const dd = document.createElement("dd");
+        dd.textContent = metric.value;
+        if (metric.className) {
+          dd.classList.add(metric.className);
+        }
+        metricsList.appendChild(dd);
+      });
+
+      metricsSection.appendChild(metricsList);
+      content.appendChild(metricsSection);
+
+      if (typeof instance.callbacks.onLoaded === "function") {
+        instance.callbacks.onLoaded();
+      }
+    }, 2000);
+  }
+
 
   function createBadge(label, extraClass = "") {
     const span = document.createElement("span");
@@ -667,21 +928,22 @@
     const analysis = item?.aiAnalysis || item?.ai_analysis || {};
     const aiSummary = item?.ai_summary ?? analysis.summary ?? "";
     const fallbackSummary = item?.summary ?? "";
-    const displaySummary = aiSummary || fallbackSummary;
+    const displaySummaryRaw = aiSummary || fallbackSummary;
     const aiSentimentRaw = item?.ai_sentiment ?? analysis?.sentiment ?? "";
+    const displaySummary = displaySummaryRaw ? displaySummaryRaw.toString().trim() : "";
+    const snippetText = deriveSnippet(item, displaySummary);
+
     const fallbackSentiment = item?.sentiment ?? "";
     const sentimentRaw = aiSentimentRaw || fallbackSentiment;
-    const sentimentInfo = normaliseSentiment(aiSentimentRaw || sentimentRaw);
-    const importance = item?.ai_importance ?? analysis?.importance ?? "";
-    const impact = item?.ai_impact ?? analysis?.impact ?? "";
-    const hasAnalysis = Boolean(
-      (analysis && (analysis.summary || analysis.sentiment || analysis.importance || analysis.impact)) ||
-      aiSummary || aiSentimentRaw || importance || impact
-    );
+    const sentimentInfo = sentimentRaw ? normaliseSentiment(sentimentRaw) : null;
+    const categories = getItemCategories(item);
+    const publishedTs = item?.published_at || item?.publishedAt || item?.time || item?.timestamp;
 
     const card = document.createElement("article");
     card.className = "news-card";
     card.setAttribute("role", "article");
+    card.tabIndex = 0;
+
     if (item?.id) card.dataset.id = item.id;
 
     const head = document.createElement("div");
@@ -703,21 +965,27 @@
     const source = document.createElement("div");
     source.className = "news-source";
     const src = item?.source || item?.provider || "";
-    const categories = getItemCategories(item);
     const sourcePieces = [];
     if (src) sourcePieces.push(src);
-    const when = formatDate(item?.published_at || item?.publishedAt || item?.time || item?.timestamp);
+    const when = formatDate(publishedTs);
     if (when) sourcePieces.push(when);
-    source.textContent = sourcePieces.join(" • ");
-
+    if (sourcePieces.length) {
+      source.textContent = sourcePieces.join(" • ");
+    } else {
+      source.hidden = true;
+    }
     const timeEl = document.createElement("div");
     timeEl.className = "news-time";
-    const rel = relativeTime(item?.published_at || item?.publishedAt || item?.time || item?.timestamp);
-    timeEl.textContent = rel;
+    const rel = relativeTime(publishedTs);
+    if (rel) {
+      timeEl.textContent = rel;
+    } else {
+      timeEl.hidden = true;
+    }
 
     meta.appendChild(title);
-    meta.appendChild(source);
-    meta.appendChild(timeEl);
+    if (!source.hidden) meta.appendChild(source);
+    if (!timeEl.hidden) meta.appendChild(timeEl);
 
     const badgeWrap = document.createElement("div");
     badgeWrap.className = "badges";
@@ -726,7 +994,7 @@
       badgeWrap.appendChild(createBadge("AI Özet"));
     }
 
-    if (aiSentimentRaw && sentimentInfo) {
+    if (sentimentInfo) {
       badgeWrap.appendChild(createBadge(sentimentInfo.label, sentimentInfo.className));
     }
 
@@ -747,25 +1015,18 @@
     const body = document.createElement("div");
     body.className = "news-body";
 
-    if (displaySummary) {
-      const summary = document.createElement("p");
-      summary.textContent = displaySummary;
-      summary.classList.add("summary");
-      body.appendChild(summary);
+    const snippet = document.createElement("p");
+    snippet.className = "news-snippet";
+    if (snippetText) {
+      snippet.textContent = snippetText;
+    } else {
+      snippet.textContent = "Detayları görmek için açın.";
+      snippet.classList.add("fallback");
     }
+    body.appendChild(snippet);
 
-    if (item?.content_html) {
-      const frag = safeContentFragment(item.content_html);
-      if (frag) body.appendChild(frag);
-    } else if (item?.content) {
-      const frag = safeContentFragment(item.content);
-      if (frag) body.appendChild(frag);
-    } else if (item?.excerpt) {
-      appendParagraphs(body, item.excerpt);
-    }
-
-    const footer = document.createElement("div");
-    footer.className = "news-footer";
+    card.appendChild(head);
+    card.appendChild(body);
 
     const tagsEl = document.createElement("div");
     tagsEl.className = "news-tags";
@@ -775,98 +1036,328 @@
       span.textContent = cat;
       tagsEl.appendChild(span);
     });
-    if (tagsEl.childNodes.length) footer.appendChild(tagsEl);
-
-    if (item?.url) {
-      const link = document.createElement("a");
-      link.className = "news-link";
-      link.href = item.url;
-      link.target = "_blank";
-      link.rel = "noopener";
-      link.textContent = "Habere git";
-      footer.appendChild(link);
+    if (tagsEl.childNodes.length) {
+      const footer = document.createElement("div");
+      footer.className = "news-footer";
+      footer.appendChild(tagsEl);
+      card.appendChild(footer);
     }
 
-    card.appendChild(head);
-    card.appendChild(body);
-    if (footer.childNodes.length) card.appendChild(footer);
+    card.addEventListener("click", (ev) => {
+      if (ev.target.closest("a, button")) return;
+      openNewsModal(item);
+    });
 
+    card.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        openNewsModal(item);
+      }
+    });
     newsListEl.appendChild(card);
   }
-    if (hasAnalysis) {
-      const actions = document.createElement("div");
-      actions.className = "analysis-actions";
-      const toggleBtn = document.createElement("button");
-      toggleBtn.type = "button";
-      toggleBtn.className = "analysis-toggle";
-      toggleBtn.textContent = "Yapay Zeka ile Analiz Et";
-      toggleBtn.setAttribute("aria-expanded", "false");
-      const panelId = `analysis-panel-${analysisPanelCounter++}`;
-      toggleBtn.setAttribute("aria-controls", panelId);
-      actions.appendChild(toggleBtn);
+  function openNewsModal(item) {
+    if (!modal) return;
+    const analysis = item?.aiAnalysis || item?.ai_analysis || {};
+    const aiSummary = item?.ai_summary ?? analysis.summary ?? "";
+    const fallbackSummary = item?.summary ?? "";
+    const displaySummaryRaw = aiSummary || fallbackSummary;
+    const displaySummary = displaySummaryRaw ? displaySummaryRaw.toString().trim() : "";
+    const aiSentimentRaw = item?.ai_sentiment ?? analysis?.sentiment ?? "";
+    const fallbackSentiment = item?.sentiment ?? "";
+    const sentimentRaw = aiSentimentRaw || fallbackSentiment;
+    const sentimentInfo = sentimentRaw ? normaliseSentiment(sentimentRaw) : null;
+    const importance = item?.ai_importance ?? analysis?.importance ?? "";
+    const impact = item?.ai_impact ?? analysis?.impact ?? "";
+    const hasAnalysis = Boolean(
+      (analysis && (analysis.summary || analysis.sentiment || analysis.importance || analysis.impact)) ||
+      aiSummary || aiSentimentRaw || importance || impact
+    );
+    const publishedTs = item?.published_at || item?.publishedAt || item?.time || item?.timestamp;
 
-      const panel = document.createElement("div");
-      panel.className = "analysis-panel";
-      panel.id = panelId;
-      panel.hidden = true;
-
-      const summaryBlock = document.createElement("div");
-      summaryBlock.className = "analysis-section";
-      const summaryTitle = document.createElement("div");
-      summaryTitle.className = "analysis-section-title";
-      summaryTitle.textContent = "Özet";
-      const summaryParagraph = document.createElement("p");
-      summaryParagraph.className = "analysis-summary";
-      summaryParagraph.textContent = displaySummary ? displaySummary : "Özet bulunamadı.";
-      summaryBlock.appendChild(summaryTitle);
-      summaryBlock.appendChild(summaryParagraph);
-      panel.appendChild(summaryBlock);
-
-      const metricsBlock = document.createElement("div");
-      metricsBlock.className = "analysis-section metrics";
-      const metricsTitle = document.createElement("div");
-      metricsTitle.className = "analysis-section-title";
-      metricsTitle.textContent = "Metrikler";
-      metricsBlock.appendChild(metricsTitle);
-
-      const metricsList = document.createElement("dl");
-      metricsList.className = "analysis-metrics";
-
-      const metrics = [
-        {
-          label: "Duygu",
-          value: aiSentimentRaw && sentimentInfo ? sentimentInfo.label : "Belirtilmemiş",
-          className: aiSentimentRaw && sentimentInfo ? sentimentInfo.className : "",
-        },
-        { label: "Önem", value: formatAnalysisValue(importance) },
-        { label: "Etki", value: formatAnalysisValue(impact) },
-      ];
-
-      metrics.forEach((metric) => {
-        const dt = document.createElement("dt");
-        dt.textContent = metric.label;
-        metricsList.appendChild(dt);
-        const dd = document.createElement("dd");
-        dd.textContent = metric.value;
-        if (metric.className) {
-          dd.classList.add(metric.className);
-        }
-        metricsList.appendChild(dd);
-      });
-
-      metricsBlock.appendChild(metricsList);
-      panel.appendChild(metricsBlock);
-
-      toggleBtn.addEventListener("click", () => {
-        const hidden = panel.hidden;
-        panel.hidden = !hidden;
-        toggleBtn.setAttribute("aria-expanded", hidden ? "true" : "false");
-        toggleBtn.classList.toggle("active", hidden);
-      });
-
-      body.appendChild(actions);
-      body.appendChild(panel);
+    const headlineText =
+      (typeof item?.headline === "string" && item.headline.trim()) ||
+      (typeof item?.title === "string" && item.title.trim()) ||
+      item?.title ||
+      "Başlıksız haber";
+    if (modalTitle) {
+      modalTitle.textContent = headlineText;
     }
+
+    const categories = getItemCategories(item).filter(Boolean).map((c) => c.toString());
+    if (modalMeta) {
+      if (categories.length) {
+        modalMeta.textContent = categories.join(" • ");
+        modalMeta.hidden = false;
+      } else {
+        modalMeta.textContent = "";
+        modalMeta.hidden = true;
+      }
+    }
+
+    const rel = relativeTime(publishedTs);
+    if (modalRelative) {
+      if (rel) {
+        modalRelative.textContent = rel;
+        modalRelative.hidden = false;
+      } else {
+        modalRelative.textContent = "";
+        modalRelative.hidden = true;
+      }
+    }
+
+    const src = item?.source || item?.provider || "";
+    const sourcePieces = [];
+    if (src) sourcePieces.push(src);
+    const when = formatDate(publishedTs);
+    if (when) sourcePieces.push(when);
+    if (modalSource) {
+      if (sourcePieces.length) {
+        modalSource.textContent = sourcePieces.join(" • ");
+        modalSource.hidden = false;
+      } else {
+        modalSource.textContent = "";
+        modalSource.hidden = true;
+      }
+    }
+
+    if (modalBadges) {
+      modalBadges.innerHTML = "";
+      if (aiSummary) modalBadges.appendChild(createBadge("AI Özet"));
+      if (sentimentInfo) modalBadges.appendChild(createBadge(sentimentInfo.label, sentimentInfo.className));
+      if (isKapNews(item) || state.filters.kapOnly) modalBadges.appendChild(createBadge("KAP", "kap"));
+      if (Array.isArray(item?.tags)) {
+        item.tags.forEach((tag) => {
+          modalBadges.appendChild(createBadge(tag.toString().toUpperCase()));
+        });
+      }
+      modalBadges.hidden = modalBadges.childNodes.length === 0;
+    }
+
+    if (modalBody) {
+      modalBody.innerHTML = "";
+      if (displaySummary) {
+        const summary = document.createElement("p");
+        summary.className = "summary";
+        summary.textContent = displaySummary;
+        modalBody.appendChild(summary);
+      }
+      let hasDetails = false;
+      if (item?.content_html) {
+        const frag = safeContentFragment(item.content_html);
+        if (frag && frag.childNodes.length) {
+          modalBody.appendChild(frag);
+          hasDetails = true;
+        }
+      } else if (item?.content) {
+        const frag = safeContentFragment(item.content);
+        if (frag && frag.childNodes.length) {
+          modalBody.appendChild(frag);
+          hasDetails = true;
+        }
+      }
+
+      const excerpt = item?.excerpt ?? item?.content_preview ?? item?.contentPreview;
+      if (!hasDetails && excerpt && (!displaySummary || toPlainText(excerpt) !== displaySummary)) {
+        appendParagraphs(modalBody, excerpt);
+        hasDetails = true;
+      }
+
+      if (!modalBody.childNodes.length) {
+        const fallback = document.createElement("p");
+        fallback.className = "summary fallback";
+        fallback.textContent = "Bu haber için ayrıntı bulunamadı.";
+        modalBody.appendChild(fallback);
+      }
+
+      modalBody.scrollTop = 0;
+    }
+    const actions = document.createElement("div");
+    actions.className = "ai-summary-actions";
+    const aiButton = document.createElement("button");
+    aiButton.type = "button";
+    aiButton.className = "ai-summary-button";
+    aiButton.textContent = "Yapay Zeka’ya Özet Çıkar";
+    actions.appendChild(aiButton);
+
+    if (!hasAnalysis) {
+      aiButton.disabled = true;
+      aiButton.classList.add("disabled");
+      aiButton.setAttribute("aria-disabled", "true");
+      aiButton.textContent = "Yapay Zeka Analizi Yok";
+      aiButton.title = "Bu haber için yapay zeka verisi bulunamadı.";
+    } else {
+      aiButton.addEventListener("click", () => {
+        aiButton.classList.add("loading");
+        aiButton.disabled = true;
+        const sentimentLabel = aiSentimentRaw && sentimentInfo
+          ? sentimentInfo.label
+          : formatAnalysisValue(sentimentRaw);
+        showAiModal(
+          {
+            title: item?.title || headlineText || "Yapay Zeka Özeti",
+            summary: displaySummary || "Özet bulunamadı.",
+            sentimentLabel,
+            sentimentClass: aiSentimentRaw && sentimentInfo ? sentimentInfo.className : "",
+            importance: formatAnalysisValue(importance),
+            impact: formatAnalysisValue(impact),
+          },
+          {
+            triggerButton: aiButton,
+            onLoaded: () => {
+              aiButton.classList.remove("loading");
+              aiButton.disabled = false;
+            },
+            onClose: () => {
+              aiButton.classList.remove("loading");
+              aiButton.disabled = false;
+            },
+          },
+        );
+      });
+    }
+
+    body.appendChild(actions);
+    if (modalAnalysis) {
+      modalAnalysis.innerHTML = "";
+      if (hasAnalysis) {
+        const panel = document.createElement("div");
+        panel.className = "analysis-panel";
+
+        const summaryBlock = document.createElement("div");
+        summaryBlock.className = "analysis-section";
+        const summaryTitle = document.createElement("div");
+        summaryTitle.className = "analysis-section-title";
+        summaryTitle.textContent = "Özet";
+        const summaryParagraph = document.createElement("p");
+        summaryParagraph.className = "analysis-summary";
+        summaryParagraph.textContent = displaySummary ? displaySummary : "Özet bulunamadı.";
+        summaryBlock.appendChild(summaryTitle);
+        summaryBlock.appendChild(summaryParagraph);
+        panel.appendChild(summaryBlock);
+
+        const metricsBlock = document.createElement("div");
+        metricsBlock.className = "analysis-section metrics";
+        const metricsTitle = document.createElement("div");
+        metricsTitle.className = "analysis-section-title";
+        metricsTitle.textContent = "Metrikler";
+        metricsBlock.appendChild(metricsTitle);
+
+        const metricsList = document.createElement("dl");
+        metricsList.className = "analysis-metrics";
+        const metrics = [
+          {
+            label: "Duygu",
+            value: sentimentInfo ? sentimentInfo.label : formatAnalysisValue(sentimentRaw),
+            className: sentimentInfo ? sentimentInfo.className : "",
+          },
+          { label: "Önem", value: formatAnalysisValue(importance) },
+          { label: "Etki", value: formatAnalysisValue(impact) },
+        ];
+
+        metrics.forEach((metric) => {
+          const dt = document.createElement("dt");
+          dt.textContent = metric.label;
+          metricsList.appendChild(dt);
+          const dd = document.createElement("dd");
+          dd.textContent = metric.value;
+          if (metric.className) {
+            dd.classList.add(metric.className);
+          }
+          metricsList.appendChild(dd);
+        });
+
+        metricsBlock.appendChild(metricsList);
+        panel.appendChild(metricsBlock);
+
+        modalAnalysis.appendChild(panel);
+        modalAnalysis.hidden = false;
+      } else {
+        modalAnalysis.hidden = true;
+      }
+    }
+
+    if (modalTags) {
+      modalTags.innerHTML = "";
+      const tagSet = new Set();
+      categories.forEach((cat) => tagSet.add(cat));
+      if (Array.isArray(item?.tags)) {
+        item.tags.forEach((tag) => {
+          const text = tag?.toString?.();
+          if (text) tagSet.add(text);
+        });
+      }
+      tagSet.forEach((tag) => {
+        const span = document.createElement("span");
+        span.textContent = tag;
+        modalTags.appendChild(span)
+      });
+      modalTags.hidden = modalTags.childNodes.length === 0;
+    }
+
+    if (modalLink) {
+      if (item?.url) {
+        modalLink.href = item.url;
+        modalLink.hidden = false;
+      } else {
+        modalLink.hidden = true;
+      }
+    }
+    const wasHidden = modal.hidden;
+    if (modal.hidden) {
+      modal.hidden = false;
+    }
+    modal.setAttribute("aria-hidden", "false");
+    if (modalBackdrop) {
+      if (modalBackdrop.hidden) modalBackdrop.hidden = false;
+      modalBackdrop.setAttribute("aria-hidden", "false");
+    }
+
+    if (modalBody) modalBody.scrollTop = 0;
+    if (modalSurface) modalSurface.scrollTop = 0;
+
+    requestAnimationFrame(() => {
+      modal.classList.add("is-active");
+      modalBackdrop && modalBackdrop.classList.add("is-active");
+      (modalClose || modalSurface)?.focus?.();
+    });
+
+    if (wasHidden) {
+      lockScroll();
+    }
+  }
+
+  function closeModal() {
+    if (!modal || modal.hidden) return;
+    modal.classList.remove("is-active");
+    modalBackdrop && modalBackdrop.classList.remove("is-active");
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      modal.hidden = true;
+      modal.setAttribute("aria-hidden", "true");
+      if (modalBackdrop) {
+        modalBackdrop.hidden = true;
+        modalBackdrop.setAttribute("aria-hidden", "true");
+      }
+      unlockScroll();
+    };
+
+    const handle = (ev) => {
+      if (ev.target === modal && ev.propertyName === "opacity") {
+        modal.removeEventListener("transitionend", handle);
+        cleanup();
+      }
+    };
+
+    modal.addEventListener("transitionend", handle);
+    setTimeout(() => {
+      modal.removeEventListener("transitionend", handle);
+      cleanup();
+    }, 360);
+  }
+
 
 
   async function fetchNews({ reset = false } = {}) {
@@ -893,9 +1384,16 @@
         : Array.isArray(payload?.results)
           ? payload.results
           : [];
+      const normalisedItems = items.map((entry) => {
+        try {
+          return flattenAiAnalysis(entry);
+        } catch (err) {
+          return entry;
+        }
+      });
 
       const rangeStart = getRangeThreshold(state.filters.range);
-      const filteredItems = items.filter((item) => {
+      const filteredItems = normalisedItems.filter((item) => {
         try {
           return shouldRenderItem(item, { rangeStart });
         } catch (err) {
@@ -909,7 +1407,7 @@
         newsEmptyEl.hidden = true;
       }
 
-      items.map(flattenAiAnalysis).forEach((item) => {
+      filteredItems.forEach((item) => {
         try { renderNewsCard(item); } catch (err) { }
       });
 
@@ -947,7 +1445,8 @@
           setStatus("Bu filtrelerle haber bulunamadı");
         } else {
           setStatus("Yeni haber yok");
-        } setLive(false);
+        }
+        setLive(false);
       }
     } catch (err) {
       console.error("news fetch failed", err);
@@ -964,21 +1463,28 @@
   });
 
   function openDrawer() {
-    drawer && drawer.classList.add("open");
-    backdrop && backdrop.classList.add("show");
+    if (drawer && !drawer.classList.contains("open")) {
+      drawer.classList.add("open");
+      lockScroll();
+    } backdrop && backdrop.classList.add("show");
     document.documentElement.style.overflow = "hidden";
   }
 
   function closeDrawer() {
     drawer && drawer.classList.remove("open");
     backdrop && backdrop.classList.remove("show");
-    document.documentElement.style.overflow = "";
   }
 
   btnMenu && btnMenu.addEventListener("click", openDrawer);
   btnCloseDrawer && btnCloseDrawer.addEventListener("click", closeDrawer);
   backdrop && backdrop.addEventListener("click", closeDrawer);
-
+  modalClose && modalClose.addEventListener("click", closeModal);
+  modalBackdrop && modalBackdrop.addEventListener("click", closeModal);
+  modal && modal.addEventListener("click", (ev) => {
+    if (ev.target === modal) {
+      closeModal();
+    }
+  });
   if (btnInfo && infoPanel) {
     btnInfo.addEventListener("click", () => {
       infoPanel.hidden = !infoPanel.hidden;
@@ -991,6 +1497,10 @@
 
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape") {
+      if (modal && !modal.hidden) {
+        closeModal();
+        return;
+      }
       closeDrawer();
       if (infoPanel) infoPanel.hidden = true;
     }

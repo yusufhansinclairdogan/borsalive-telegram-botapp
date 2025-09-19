@@ -37,7 +37,8 @@
             <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path>
           </svg>
           <svg class="sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path d="M12 4V2m0 20v-2M4.93 4.93L3.51 3.51m16.98 16.98l-1.42-1.42M4 12H2m20 0h-2M4.93 19.07l-1.42 1.42m16.98-16.98l-1.42 1.42M12 8a4 4 0 100 8 4 4 0 000-8z"
+            <path
+              d="M12 4V2m0 20v-2M4.93 4.93L3.51 3.51m16.98 16.98l-1.42-1.42M4 12H2m20 0h-2M4.93 19.07l-1.42 1.42m16.98-16.98l-1.42 1.42M12 8a4 4 0 100 8 4 4 0 000-8z"
               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
           </svg>
         </button>
@@ -48,9 +49,12 @@
       <div id="status">Haberler yükleniyor…</div>
       <div class="search" id="searchWrap">
         <svg class="search-ico" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-          <path d="M10 3a7 7 0 015.292 11.708l4 4a1 1 0 01-1.414 1.414l-4-4A7 7 0 1110 3zm0 2a5 5 0 100 10 5 5 0 000-10z"></path>
+          <path
+            d="M10 3a7 7 0 015.292 11.708l4 4a1 1 0 01-1.414 1.414l-4-4A7 7 0 1110 3zm0 2a5 5 0 100 10 5 5 0 000-10z">
+          </path>
         </svg>
-        <input id="symbolInput" type="text" inputmode="latin" maxlength="12" placeholder="Sembol ara (örn: THYAO)" autocomplete="off" />
+        <input id="symbolInput" type="text" inputmode="latin" maxlength="12" placeholder="Sembol ara (örn: THYAO)"
+          autocomplete="off" />
         <button id="symbolClear" type="button" aria-label="Temizle" hidden>&times;</button>
         <div id="symbolDropdown" class="autocomplete" hidden></div>
       </div>
@@ -82,7 +86,32 @@
         </div>
       </div>
     </section>
-
+    <div id="newsModalBackdrop" class="modal-backdrop" hidden aria-hidden="true"></div>
+    <div id="newsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="newsModalTitle"
+      aria-describedby="newsModalBody" hidden tabindex="-1">
+      <div class="modal-surface" data-modal-surface tabindex="-1">
+        <div class="modal-content">
+          <header class="modal-header">
+            <div class="modal-headline">
+              <h2 id="newsModalTitle" class="modal-title"></h2>
+              <div id="newsModalMeta" class="modal-meta"></div>
+            </div>
+            <button id="newsModalClose" class="modal-close" type="button" aria-label="Kapat">&times;</button>
+          </header>
+          <div class="modal-submeta">
+            <span id="newsModalRelative" class="modal-time"></span>
+            <span id="newsModalSource" class="modal-source"></span>
+          </div>
+          <div id="newsModalBadges" class="modal-badges" aria-live="polite"></div>
+          <div id="newsModalBody" class="modal-body"></div>
+          <div id="newsModalAnalysis" class="modal-analysis"></div>
+          <footer class="modal-footer">
+            <div id="newsModalTags" class="modal-tags"></div>
+            <a id="newsModalLink" class="modal-link" href="#" target="_blank" rel="noopener" hidden>Habere git</a>
+          </footer>
+        </div>
+      </div>
+    </div>
     <section class="news-area" aria-live="polite">
       <div id="newsEmpty" class="empty" hidden>Bu filtrelerle haber bulunamadı.</div>
       <div id="newsLoading" class="loading">Yükleniyor…</div>
@@ -157,9 +186,11 @@
       <button id="infoClose" type="button" aria-label="Kapat">&times;</button>
     </div>
     <div class="info-body">
-      <p>Hisse sembolünü aratarak veya listeden seçerek özel haberleri görebilirsiniz. KAP odaklı mod yalnızca Kamuyu Aydınlatma Platformu
+      <p>Hisse sembolünü aratarak veya listeden seçerek özel haberleri görebilirsiniz. KAP odaklı mod yalnızca Kamuyu
+        Aydınlatma Platformu
         duyurularını listeler.</p>
-      <p>Kategori ve duygu filtreleri haber kartlarını anında yeniler. "Daha fazla yükle" butonuyla geçmişe doğru ilerleyebilirsiniz.</p>
+      <p>Kategori ve duygu filtreleri haber kartlarını anında yeniler. "Daha fazla yükle" butonuyla geçmişe doğru
+        ilerleyebilirsiniz.</p>
     </div>
   </aside>
 
