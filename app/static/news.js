@@ -27,7 +27,8 @@
     });
     themeBtn.addEventListener("pointerdown", (ev) => ev.preventDefault(), { passive: false });
   }
-
+  const brandLogo = qs("#brandLogo");
+  let brandLogoObjectUrl = null;
   const statusEl = qs("#status");
   const lastUpdateEl = qs("#lastUpdate");
   const liveBadge = qs("#liveBadge");
@@ -335,6 +336,35 @@
   function normaliseSymbol(sym) {
     return (sym || "").toString().trim().toUpperCase();
   }
+  async function refreshBrandLogo(symbol) {
+    if (!brandLogo) return;
+    const activeSymbol = normaliseSymbol(symbol);
+    if (!activeSymbol) return;
+    const endpoint = `/logo/${encodeURIComponent(activeSymbol)}`;
+    try {
+      const response = await fetch(endpoint, { cache: "no-store" });
+      if (!response.ok) return;
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType && !contentType.startsWith("image/")) return;
+      const blob = await response.blob();
+      if (!blob || blob.size === 0) return;
+      const objectUrl = URL.createObjectURL(blob);
+      if (brandLogoObjectUrl) {
+        URL.revokeObjectURL(brandLogoObjectUrl);
+      }
+      brandLogo.src = objectUrl;
+      brandLogoObjectUrl = objectUrl;
+    } catch (err) {
+      console.warn("logo fetch failed", err);
+    }
+  }
+
+  window.addEventListener("beforeunload", () => {
+    if (brandLogoObjectUrl) {
+      URL.revokeObjectURL(brandLogoObjectUrl);
+      brandLogoObjectUrl = null;
+    }
+  });
 
   async function fetchSymbolsOnce() {
     if (symbolPromise) return symbolPromise;
@@ -1279,61 +1309,9 @@
     body.appendChild(actions);
     if (modalAnalysis) {
       modalAnalysis.innerHTML = "";
-      if (hasAnalysis) {
-        const panel = document.createElement("div");
-        panel.className = "analysis-panel";
+      modalAnalysis.hidden = true;
 
-        const summaryBlock = document.createElement("div");
-        summaryBlock.className = "analysis-section";
-        const summaryTitle = document.createElement("div");
-        summaryTitle.className = "analysis-section-title";
-        summaryTitle.textContent = "Özet";
-        const summaryParagraph = document.createElement("p");
-        summaryParagraph.className = "analysis-summary";
-        summaryParagraph.textContent = displaySummary ? displaySummary : "Özet bulunamadı.";
-        summaryBlock.appendChild(summaryTitle);
-        summaryBlock.appendChild(summaryParagraph);
-        panel.appendChild(summaryBlock);
 
-        const metricsBlock = document.createElement("div");
-        metricsBlock.className = "analysis-section metrics";
-        const metricsTitle = document.createElement("div");
-        metricsTitle.className = "analysis-section-title";
-        metricsTitle.textContent = "Metrikler";
-        metricsBlock.appendChild(metricsTitle);
-
-        const metricsList = document.createElement("dl");
-        metricsList.className = "analysis-metrics";
-        const metrics = [
-          {
-            label: "Duygu",
-            value: sentimentInfo ? sentimentInfo.label : formatAnalysisValue(sentimentRaw),
-            className: sentimentInfo ? sentimentInfo.className : "",
-          },
-          { label: "Önem", value: formatImportanceLevel(importance) },
-          { label: "Etki", value: formatImpactHorizon(impact) },
-        ];
-
-        metrics.forEach((metric) => {
-          const dt = document.createElement("dt");
-          dt.textContent = metric.label;
-          metricsList.appendChild(dt);
-          const dd = document.createElement("dd");
-          dd.textContent = metric.value;
-          if (metric.className) {
-            dd.classList.add(metric.className);
-          }
-          metricsList.appendChild(dd);
-        });
-
-        metricsBlock.appendChild(metricsList);
-        panel.appendChild(metricsBlock);
-
-        modalAnalysis.appendChild(panel);
-        modalAnalysis.hidden = false;
-      } else {
-        modalAnalysis.hidden = true;
-      }
     }
 
     if (modalTags) {
@@ -1588,6 +1566,7 @@
     }
     updateNavLinks(state.symbol);
     updateUrl(state.symbol);
+    refreshBrandLogo(state.symbol);
     fetchNews({ reset: true });
   }
 
